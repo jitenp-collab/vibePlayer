@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Replace #09090F with your dark/primary theme hex code -->
+    <color name="app_background">#09090F</color> 
+</resources>
