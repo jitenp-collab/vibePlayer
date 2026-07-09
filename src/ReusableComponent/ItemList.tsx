@@ -3,6 +3,7 @@ import { View, FlatList, StyleSheet } from 'react-native';
 import { ItemListProps } from '../util/const/Type';
 import { SearchBar } from './SearchBar';
 import ItemCard from './ItemCard';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Separator = () => <View style={styles.separator} />;
 

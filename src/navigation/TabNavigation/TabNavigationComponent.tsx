@@ -9,6 +9,7 @@ import {
 import { colors } from '../../util/theme/theme';
 import { TabPrope } from '../../util/const/Type';
 import ReuseButton from '../../ReusableComponent/ReuseButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const TABS = [
   {
@@ -36,7 +37,7 @@ const TabNavigationComponent = ({
   onTabPress,
 }: TabPrope) => {
   return (
-    <View style={styles.wrapper}>
+    <SafeAreaView style={styles.wrapper}>
       <View style={styles.container}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.key;
@@ -53,7 +54,7 @@ const TabNavigationComponent = ({
           );
         })}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

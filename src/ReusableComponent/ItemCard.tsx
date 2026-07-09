@@ -42,67 +42,68 @@ const ItemCard = ({
   };
 
   return (
-    <ReuseButton
-      style={styles.card}
-      onPress={() => onPressItem && onPressItem(item, index)}
-      disabled={!onPressItem}
-    >
-      {artwork ? (
-        <FallbackImage style={styles.artwork} uri={artwork} />
-      ) : (
-        <View style={[styles.artwork, styles.artworkFallback]}>
-          <Text style={styles.artworkFallbackText}>♪</Text>
+
+      <ReuseButton
+        style={styles.card}
+        onPress={() => onPressItem && onPressItem(item, index)}
+        disabled={!onPressItem}
+      >
+        {artwork ? (
+          <FallbackImage style={styles.artwork} uri={artwork} />
+        ) : (
+          <View style={[styles.artwork, styles.artworkFallback]}>
+            <Text style={styles.artworkFallbackText}>♪</Text>
+          </View>
+        )}
+
+        <View style={styles.info} collapsable={false}>
+          <MarqueeText style={styles.title}>{getTitle(item)}</MarqueeText>
+          {subtitle ? (
+            <Text style={styles.artist} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
-      )}
 
-      <View style={styles.info} collapsable={false}>
-        <MarqueeText style={styles.title}>{getTitle(item)}</MarqueeText>
-        {subtitle ? (
-          <Text style={styles.artist} numberOfLines={1}>
-            {subtitle}
-          </Text>
+        {onToggleFavourite ? (
+          <ReuseButton
+            onPress={() => onToggleFavourite(item, index)}
+            style={styles.favouriteBtn}
+          >
+            {favourite ? (
+              <FavouriteSVG width={23} height={23} fill={colors.primaryLight} />
+            ) : (
+              <HeartOutlineSVG width={23} height={23} fill="#e6e3e3" />
+            )}
+          </ReuseButton>
         ) : null}
-      </View>
 
-      {onToggleFavourite ? (
-        <ReuseButton
-          onPress={() => onToggleFavourite(item, index)}
-          style={styles.favouriteBtn}
-        >
-          {favourite ? (
-            <FavouriteSVG width={23} height={23} fill={colors.primaryLight} />
-          ) : (
-            <HeartOutlineSVG width={23} height={23} fill="#e6e3e3" />
-          )}
-        </ReuseButton>
-      ) : null}
+        {onDeleteItem ? (
+          <ReuseButton onPress={handleDelete} style={styles.deleteBtn}>
+            <DeletFolder width={30} height={30} />
+          </ReuseButton>
+        ) : null}
 
-      {onDeleteItem ? (
-        <ReuseButton onPress={handleDelete} style={styles.deleteBtn}>
-          <DeletFolder width={30} height={30} />
-        </ReuseButton>
-      ) : null}
-
-      {onToggleAdd ? (
-        <ReuseButton
-          onPress={() => !added && onToggleAdd(item, index)}
-          disabled={added}
-          style={[
-            styles.toggleAddBtn,
-            added ? styles.toggleAddBtnAdded : styles.toggleAddBtnDefault,
-          ]}
-        >
-          <Text
+        {onToggleAdd ? (
+          <ReuseButton
+            onPress={() => !added && onToggleAdd(item, index)}
+            disabled={added}
             style={[
-              styles.toggleAddBtnText,
-              added && styles.toggleAddBtnTextAdded,
+              styles.toggleAddBtn,
+              added ? styles.toggleAddBtnAdded : styles.toggleAddBtnDefault,
             ]}
           >
-            {added ? '✓' : '+'}
-          </Text>
-        </ReuseButton>
-      ) : null}
-    </ReuseButton>
+            <Text
+              style={[
+                styles.toggleAddBtnText,
+                added && styles.toggleAddBtnTextAdded,
+              ]}
+            >
+              {added ? '✓' : '+'}
+            </Text>
+          </ReuseButton>
+        ) : null}
+      </ReuseButton>
   );
 };
 

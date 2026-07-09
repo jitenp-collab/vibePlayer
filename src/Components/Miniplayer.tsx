@@ -13,6 +13,7 @@ import { useAppSelector } from '../redux/hook';
 import { useMiniPlayer } from '../customeHook/useMiniPlayer';
 import FallbackImage from '../ReusableComponent/FallbackImage';
 import ReuseButton from '../ReusableComponent/ReuseButton';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MiniPlayer = () => {
   const navigation = useNavigation<any>();
@@ -43,7 +44,7 @@ const MiniPlayer = () => {
   };
 
   return (
-    <View style={styles.wrapper}>
+    <SafeAreaView style={styles.wrapper}>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
       </View>
@@ -83,7 +84,7 @@ const MiniPlayer = () => {
           <NextSVG width={22} height={22} fill="#fff" />
         </ReuseButton>
       </ReuseButton>
-    </View>
+    </SafeAreaView>
   );
 };
 export default MiniPlayer;

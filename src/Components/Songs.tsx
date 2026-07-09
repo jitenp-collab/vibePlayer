@@ -6,15 +6,13 @@ import { useAppDispatch, useAppSelector } from '../redux/hook';
 import { AddFavourite } from '../redux/actions/actions';
 import { View } from 'react-native';
 
-
 const Songs = () => {
-
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const { favouriteSong } = useAppSelector(state => state.songs);
 
   return (
-    <View  >
+    <View>
       <ItemList
         data={songs}
         keyExtractor={item => item.id}
@@ -28,7 +26,7 @@ const Songs = () => {
           favouriteSong.some((fav: any) => fav.id === item.id)
         }
         onToggleFavourite={item => dispatch(AddFavourite(item))}
-        Paddingbottom={365}
+        Paddingbottom="100%"
       />
     </View>
   );
