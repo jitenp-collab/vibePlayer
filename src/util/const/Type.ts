@@ -1,4 +1,4 @@
-import { ViewStyle,DimensionValue,TouchableOpacityProps,TextInputProps as RNTextInputProps,StyleProp, TextStyle } from "react-native";
+import { ViewStyle, DimensionValue, TouchableOpacityProps, TextInputProps as RNTextInputProps, StyleProp, TextStyle } from "react-native";
 
 
 export type TabPrope = {
@@ -59,7 +59,7 @@ export type ItemListProps = {
   onDeleteItem?: (item: any, index: number) => void;
   isAdded?: (item: any) => boolean;
   onToggleAdd?: (item: any, index: number) => void;
-  Paddingbottom?:DimensionValue
+  Paddingbottom?: DimensionValue
 };
 
 export type ItenCardProps = {
@@ -101,9 +101,10 @@ export type AppModalProps = {
   children: React.ReactNode;
   cardStyle?: ViewStyle;
   animationType?: 'fade' | 'slide' | 'none';
-  cardHeight?: DimensionValue;      
-  maxCardHeight?: DimensionValue;  
-   variant?: 'card' | 'fullscreen';
+  cardHeight?: DimensionValue;
+  maxCardHeight?: DimensionValue;
+  variant?: 'card' | 'fullscreen';
+  transparentBackdrop: boolean
 }
 
 export type TouchableProps = {
@@ -113,7 +114,7 @@ export type TouchableProps = {
   style?: StyleProp<ViewStyle>;
   hitSlop?: TouchableOpacityProps['hitSlop'];
   activeOpacity?: number;
-  onLongPress?:()=>void
+  onLongPress?: () => void
 };
 
 

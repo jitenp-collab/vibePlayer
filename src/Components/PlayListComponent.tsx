@@ -133,6 +133,7 @@ const PlayListComponent = ({
         cardHeight="auto"
         maxCardHeight="60%"
         cardStyle={styles.createModalCard}
+        transparentBackdrop={false}
       >
         <Text style={styles.modalTitle}>New Playlist</Text>
 
