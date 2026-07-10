@@ -21,10 +21,12 @@ export const useDeviceAudio = () => {
             const result = await getDeviceAudioFiles()
             const convert = deviceFilesToSongs(result)
             dispatch(setDeviceSong(convert))
+            // console.log("result", result);
+            // console.log("convert", convert);
+  
         } catch (err) {
             console.log("Failed to load audio files", err)
             setError("Something went wrong while scanning for audio files")
-
         } finally {
             setIsLoading(false)
         }
@@ -35,5 +37,5 @@ export const useDeviceAudio = () => {
         load()
     }, [isAllowed, load])
 
-    return {deviceSong, isAllowed, isLoading, error, refresh: load }
+    return { deviceSong, isAllowed, isLoading, error, refresh: load }
 }

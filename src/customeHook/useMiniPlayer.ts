@@ -1,5 +1,6 @@
+// customeHook/useMiniPlayer.ts
 import { useCallback, useState, useEffect } from "react";
-import TrackPlayer, { useIsPlaying, useActiveMediaItem } from "@rntp/player";
+import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event, PlaybackState } from "@rntp/player";
 import { lastPlayedData, SongProp } from "../util/const/Type";
 import { useIsFocused } from "@react-navigation/native";
 import { getLastPlay, goToNext, saveLastPlay, goToPrev, toMediaItem } from "./usePlayer";
@@ -8,17 +9,27 @@ export const useMiniPlayer = (
   songs: SongProp[],
   deviceSong: SongProp[],
   favouriteSong: SongProp[],
-  PlayList: any[]
+  PlayList: any[],
+  recommendeSong: SongProp[],
 ) => {
   const [lastPlayed, setLastPlayed] = useState<lastPlayedData | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   const playing = useIsPlaying();
   const activeItem = useActiveMediaItem();
   const isFocused = useIsFocused();
 
-  // pick the correct list for a given source — single source of truth
+  useEffect(() => {
+    const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, (event) => {
+      if (event?.state !== undefined) {
+        setIsBuffering(event.state === PlaybackState.Buffering);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const getListForSource = useCallback(
     (source: any, playlistId?: string) => {
       if (source === "device") return deviceSong;
@@ -26,9 +37,24 @@ export const useMiniPlayer = (
       if (source === "playList") {
         return PlayList?.find((p: any) => p.id === playlistId)?.songs ?? [];
       }
+      if (source === "Reccomandation") return recommendeSong ?? [];
       return songs;
     },
-    [songs, deviceSong, favouriteSong, PlayList],
+    [songs, deviceSong, favouriteSong, PlayList, recommendeSong],
+  );
+
+  // resolves the correct index for a saved lastPlayed entry against a *current* list,
+  // preferring songId lookup since list order (e.g. recommendations) can shift between sessions
+  const resolveIndex = useCallback(
+    (list: SongProp[], data: lastPlayedData | null) => {
+      if (!data) return -1;
+      if (data.songId) {
+        const idx = list.findIndex(s => s.id === data.songId);
+        if (idx !== -1) return idx;
+      }
+      return data.songIndex;
+    },
+    [],
   );
 
   const loadLastPlayed = useCallback(async () => {
@@ -58,9 +84,10 @@ export const useMiniPlayer = (
   }, [activeItem]);
 
   const activeList = getListForSource(lastPlayed?.source, lastPlayed?.playlistId);
-  const song = lastPlayed ? activeList[lastPlayed.songIndex] : undefined;
+  const resolvedIndex = resolveIndex(activeList, lastPlayed);
+  const song = lastPlayed && resolvedIndex !== -1 ? activeList[resolvedIndex] : undefined;
 
-  const ensureQueueLoaded = useCallback( async() => {
+  const ensureQueueLoaded = useCallback(async () => {
     if (!lastPlayed) return;
 
     const list = getListForSource(lastPlayed.source, lastPlayed.playlistId);
@@ -69,46 +96,53 @@ export const useMiniPlayer = (
     const queueEmpty = activeIdx === null || activeQueue.length === 0;
 
     if (queueEmpty) {
-      // await
-       TrackPlayer.setMediaItems(list.map(toMediaItem), lastPlayed.songIndex);
+      const startIndex = resolveIndex(list, lastPlayed);
+      const safeStartIndex = startIndex !== -1 ? startIndex : 0;
+
+      TrackPlayer.setMediaItems(list.map(toMediaItem), safeStartIndex);
       if (lastPlayed.position > 0) {
-        // await
-         TrackPlayer.seekTo(lastPlayed.position);
+        TrackPlayer.seekTo(lastPlayed.position);
       }
     }
-  }, [lastPlayed, getListForSource]);
+  }, [lastPlayed, getListForSource, resolveIndex]);
 
   const togglePlay = useCallback(async () => {
-    if (!lastPlayed) return;
+    if (!lastPlayed || isBuffering) return;
     await ensureQueueLoaded();
     TrackPlayer.isPlaying() ? TrackPlayer.pause() : TrackPlayer.play();
-  }, [lastPlayed, ensureQueueLoaded]);
+  }, [lastPlayed, ensureQueueLoaded, isBuffering]);
 
   const handleNext = useCallback(() => {
     if (!lastPlayed) return;
     const list = getListForSource(lastPlayed.source, lastPlayed.playlistId);
-    const newIndex = goToNext(list, lastPlayed.songIndex);
+    const currentIdx = resolveIndex(list, lastPlayed);
+    const newIndex = goToNext(list, currentIdx !== -1 ? currentIdx : 0);
+    const newSongId = list[newIndex]?.id;
     setLastPlayed({
       songIndex: newIndex,
       position: 0,
       source: lastPlayed.source,
       playlistId: lastPlayed.playlistId,
+      songId: newSongId,
     });
-    saveLastPlay(newIndex, 0, lastPlayed.source, lastPlayed.playlistId);
-  }, [lastPlayed, getListForSource]);
+    saveLastPlay(newIndex, 0, lastPlayed.source, lastPlayed.playlistId, newSongId);
+  }, [lastPlayed, getListForSource, resolveIndex]);
 
   const handlePrev = useCallback(() => {
     if (!lastPlayed) return;
     const list = getListForSource(lastPlayed.source, lastPlayed.playlistId);
-    const newIndex = goToPrev(list, lastPlayed.songIndex, position);
+    const currentIdx = resolveIndex(list, lastPlayed);
+    const newIndex = goToPrev(list, currentIdx !== -1 ? currentIdx : 0, position);
+    const newSongId = list[newIndex]?.id;
     setLastPlayed({
       songIndex: newIndex,
       position: 0,
       source: lastPlayed.source,
       playlistId: lastPlayed.playlistId,
+      songId: newSongId,
     });
-    saveLastPlay(newIndex, 0, lastPlayed.source, lastPlayed.playlistId);
-  }, [lastPlayed, position, getListForSource]);
+    saveLastPlay(newIndex, 0, lastPlayed.source, lastPlayed.playlistId, newSongId);
+  }, [lastPlayed, position, getListForSource, resolveIndex]);
 
   const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
 
@@ -117,6 +151,7 @@ export const useMiniPlayer = (
     lastPlayed,
     playing,
     progressPercent,
+    isBuffering,
     togglePlay,
     handleNext,
     handlePrev,

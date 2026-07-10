@@ -14,13 +14,13 @@ const ItemCard = ({
   getSubtitle,
   getArtwork,
   onPressItem,
-  showIndex,
   onToggleFavourite,
   isFavourite,
   onDeleteItem,
   isAdded,
   onToggleAdd,
 }: ItenCardProps) => {
+  
   const artwork = getArtwork ? getArtwork(item) : undefined;
   const subtitle = getSubtitle ? getSubtitle(item) : undefined;
   const favourite = isFavourite ? isFavourite(item) : false;
@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1.5,
-    borderColor: colors.border,
+    // borderBottomWidth: 1.5,
+    // borderColor: colors.border,
     paddingHorizontal: 10,
     paddingVertical: 5,
     gap: 12,

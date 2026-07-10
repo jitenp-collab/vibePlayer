@@ -45,9 +45,9 @@ const PLayListDetailCOmponent = () => {
     dispatch(removeFromPlayList({ playListId: playlistId, songId: song.id }));
   };
 
-  useEffect(() => {
-    console.log(playlistId);
-  }, [playlistId]);
+  // useEffect(() => {
+  //   console.log(playlistId);
+  // }, [playlistId]);
 
   return (
     <View style={styles.container}>
@@ -114,6 +114,7 @@ const PLayListDetailCOmponent = () => {
         visible={addModalVisible}
         onClose={closeModal}
         variant="fullscreen"
+        transparentBackdrop={false}
       >
         <View style={styles.modalHeader}>
           <View style={{ flex: 1 }}>

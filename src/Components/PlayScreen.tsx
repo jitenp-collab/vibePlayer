@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet,ActivityIndicator } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors } from '../util/theme/theme';
@@ -44,28 +44,28 @@ const PlayerScreen = () => {
     songIndex: number;
     songId?: string;
     startPosition?: number;
-    source?: 'offline' | 'device' | 'favourite' | 'playList';
+    source?: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation';
     playlistId: string;
   };
-  const { songs, deviceSong, favouriteSong, PlayList } = useAppSelector(
-    state => state.songs,
-  );
+  const { songs, deviceSong, favouriteSong, PlayList, recommendedSong } =
+    useAppSelector(state => state.songs);
 
   const playListSong =
     PlayList?.find((s: PlaylistProp) => s.id === playlistId)?.songs ?? [];
 
   const selectedSong =
-    source === 'device'
+    (source === 'device'
       ? deviceSong
       : source === 'favourite'
       ? favouriteSong
       : source === 'playList'
       ? playListSong
-      : songs;
+      : source === 'Reccomandation'
+      ? recommendedSong
+      : songs) ?? [];
 
   const foundIndex = songId ? selectedSong.findIndex(s => s.id === songId) : -1;
   const initialIndex = foundIndex !== -1 ? foundIndex : songIndex;
-
   const {
     playing,
     currentIndex,
@@ -81,6 +81,7 @@ const PlayerScreen = () => {
     handleSeekForward,
     handleSkipForward,
     panHandlers,
+    isBuffering,
   } = usePlayer(selectedSong, initialIndex, startPosition, source, playlistId);
 
   const currentSong = selectedSong[currentIndex];
@@ -161,9 +162,7 @@ const PlayerScreen = () => {
 
       <View style={styles.infoRow}>
         <View style={{ flex: 1 }}>
-          <MarqueeText  style={styles.title}>
-            {currentSong.title}
-          </MarqueeText>
+          <MarqueeText style={styles.title}>{currentSong.title}</MarqueeText>
           <Text style={styles.artist} numberOfLines={1}>
             Artist Name : {currentSong.artist}
           </Text>
@@ -206,14 +205,21 @@ const PlayerScreen = () => {
         <ReuseButton onPress={handlePrev} style={styles.controlBtn}>
           <PreviousSVG />
         </ReuseButton>
-        <ReuseButton
-          onPress={handleSeekBackward}
-          style={styles.controlBtn}
-        >
+        <ReuseButton onPress={handleSeekBackward} style={styles.controlBtn}>
           <RewindSongSVG />
         </ReuseButton>
-        <ReuseButton onPress={togglePlay} style={styles.playBtn}>
-          {playing ? <PauseSongSVG fill="#000" /> : <PlaySongSVG fill="#000" />}
+        <ReuseButton
+          onPress={togglePlay}
+          style={styles.playBtn}
+          disabled={isBuffering}
+        >
+          {isBuffering ? (
+            <ActivityIndicator size="small" color="#000000" />
+          ) : playing ? (
+            <PauseSongSVG fill="#000" />
+          ) : (
+            <PlaySongSVG fill="#000" />
+          )}
         </ReuseButton>
         <ReuseButton onPress={handleSeekForward} style={styles.controlBtn}>
           <ForwerdSongSvg />

@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event } from '@rntp/player';
+import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event,PlaybackState  } from '@rntp/player';
 import { lastPlayedData, SongProp } from '../util/const/Type';
 import { PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lastPlayedSong } from '../util/const/ConstName';
+import { useAppDispatch } from '../redux/hook';
+import { recordPlay } from '../redux/actions/actions';
+import { loadRecommendedSongs } from '../redux/actions/actions';
 
 const SWIPE_THRESHOLD = 50;
 const DIRECTION_LOCK_THRESHOLD = 20;
@@ -22,9 +25,15 @@ export const toMediaItem = (song: SongProp) => ({
   artworkUrl: song.artwork,
 });
 
-export const saveLastPlay = async (songIndex: number, position: number, source: 'offline' | 'device' | "favourite" | "playList" = 'offline', playlistId?: string,) => {
+export const saveLastPlay = async (
+  songIndex: number,
+  position: number,
+  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' = 'offline',
+  playlistId?: string,
+  songId?: string,
+) => {
   try {
-    const data: lastPlayedData = { songIndex, position, source, playlistId };
+    const data: lastPlayedData = { songIndex, position, source, playlistId, songId };
     await AsyncStorage.setItem(lastPlayedSong, JSON.stringify(data));
   } catch (error) {
     console.log('Failed to store song', error);
@@ -70,23 +79,39 @@ export const goToPrev = (
   return songs.length - 1;
 };
 
-export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?: number, source: 'offline' | 'device' | "favourite" | "playList" = 'offline', playlistId?: string,) => {
+export const usePlayer = (
+  songs: SongProp[],
+  songIndex: number,
+  initialPosition?: number,
+  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' = 'offline',
+  playlistId?: string,
+) => {
   const [currentIndex, setCurrentIndex] = useState(songIndex);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastRecordedIndexRef = useRef<number | null>(null);
   const hasLoopedRef = useRef(false);
+
+  
+  const queueSongsRef = useRef<SongProp[]>(songs);
 
   const playing = useIsPlaying();
   const activeItem = useActiveMediaItem();
 
-  // load queue + resume saved position if reopening the same song
+  const dispatch = useAppDispatch();
+
+  // load queue + resume saved position if reopening the same song — runs once per
+  // screen mount only. Deliberately NOT re-run when `songs` changes reference later.
   useEffect(() => {
-    if (!songs || songs.length === 0) return; // guard: nothing to load
+    const initialSongs = queueSongsRef.current;
+    if (!initialSongs || initialSongs.length === 0) return;
 
     const init = async () => {
-      const safeIndex = Math.min(Math.max(songIndex, 0), songs.length - 1);
+      const safeIndex = Math.min(Math.max(songIndex, 0), initialSongs.length - 1);
 
       const activeIdx = TrackPlayer.getActiveMediaItemIndex();
       const activeQueue = TrackPlayer.getQueue();
@@ -94,8 +119,8 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
       const alreadyLoaded =
         activeIdx !== null &&
         activeIdx === safeIndex &&
-        activeQueue.length === songs.length &&
-        activeQueue[safeIndex]?.url === toMediaItem(songs[safeIndex]).url;
+        activeQueue.length === initialSongs.length &&
+        activeQueue[safeIndex]?.url === toMediaItem(initialSongs[safeIndex]).url;
 
       if (alreadyLoaded) {
         const progress = TrackPlayer.getProgress();
@@ -108,7 +133,7 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
         return;
       }
 
-      TrackPlayer.setMediaItems(songs.map(toMediaItem), safeIndex);
+      TrackPlayer.setMediaItems(initialSongs.map(toMediaItem), safeIndex);
       setCurrentIndex(safeIndex);
 
       if (initialPosition && initialPosition > 0) {
@@ -128,14 +153,21 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
     };
 
     init();
-  }, [songIndex, songs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only — see comment on queueSongsRef above
 
   // sync index on track change
   useEffect(() => {
     const idx = TrackPlayer.getActiveMediaItemIndex();
-    if (idx !== null && idx !== currentIndex) {
+    if (idx !== null && idx !== lastRecordedIndexRef.current) {
+      lastRecordedIndexRef.current = idx;
       setCurrentIndex(idx);
       hasLoopedRef.current = false;
+      const playedSong = queueSongsRef.current[idx];
+      if (playedSong) {
+        dispatch(recordPlay(playedSong.id));
+        dispatch(loadRecommendedSongs());
+      }
     }
   }, [activeItem]);
 
@@ -143,13 +175,14 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       if (isSeeking) return;
-      if (songs.length === 0) return; // guard
+      const list = queueSongsRef.current;
+      if (list.length === 0) return; // guard
 
       const progress = TrackPlayer.getProgress();
       setPosition(progress.position);
       setDuration(progress.duration);
 
-      const isLastSong = currentIndex === songs.length - 1;
+      const isLastSong = currentIndex === list.length - 1;
       const nearEnd =
         progress.duration > 0 && progress.position >= progress.duration - 0.5;
 
@@ -166,41 +199,45 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isSeeking, currentIndex, songs.length]);
+  }, [isSeeking, currentIndex]);
 
   useEffect(() => {
-    const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, () => {
-      const idx = TrackPlayer.getActiveMediaItemIndex();
-      if (idx !== null) setCurrentIndex(idx);
-    });
-    return () => sub.remove();
-  }, []);
+  const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, (event) => {
+    const idx = TrackPlayer.getActiveMediaItemIndex();
+    if (idx !== null) setCurrentIndex(idx);
+
+    if (event?.state !== undefined) {
+      setIsBuffering(event.state === PlaybackState.Buffering);
+    }
+  });
+  return () => sub.remove();
+}, []);
 
   useEffect(() => {
-    if (songs.length === 0) return; // guard: nothing playing, don't overwrite saved state
-    saveLastPlay(currentIndex, 0, source, playlistId);
-  }, [currentIndex, source, songs.length, playlistId]);
+    if (queueSongsRef.current.length === 0) return;
+    saveLastPlay(currentIndex, 0, source, playlistId, queueSongsRef.current[currentIndex]?.id);
+  }, [currentIndex, source, playlistId]);
 
   const saveTickRef = useRef(0);
   useEffect(() => {
-    if (songs.length === 0) return;
+    if (queueSongsRef.current.length === 0) return;
     saveTickRef.current += 1;
     if (saveTickRef.current % 10 === 0) {
-      saveLastPlay(currentIndex, position, source, playlistId);
+      saveLastPlay(currentIndex, position, source, playlistId, queueSongsRef.current[currentIndex]?.id);
     }
-  }, [position, currentIndex, source, songs.length, playlistId]);
+  }, [position, currentIndex, source, playlistId]);
 
   const togglePlay = useCallback(() => {
     playing ? TrackPlayer.pause() : TrackPlayer.play();
   }, [playing]);
 
   const handleNext = useCallback(() => {
-    setCurrentIndex(i => goToNext(songs, i));
-  }, [songs]);
+    setCurrentIndex(i => goToNext(queueSongsRef.current, i));
+  }, []);
 
   const handlePrev = useCallback(() => {
-    setCurrentIndex(i => goToPrev(songs, i, position));
-  }, [songs, position]);
+    setCurrentIndex(i => goToPrev(queueSongsRef.current, i, position));
+  }, [position]);
 
   const handleSeekForward = useCallback(() => {
     const newPosition = Math.min(position + 10, duration);
@@ -218,11 +255,12 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
   }, []);
 
   const handleSkipForward = useCallback(() => {
-    if (songs.length === 0) return; // guard against % 0
-    const targetIndex = (currentIndex + 2) % songs.length;
+    const list = queueSongsRef.current;
+    if (list.length === 0) return; // guard against % 0
+    const targetIndex = (currentIndex + 2) % list.length;
     TrackPlayer.skipToIndex(targetIndex);
     setCurrentIndex(targetIndex);
-  }, [currentIndex, songs.length]);
+  }, [currentIndex]);
 
   const handleNextRef = useRef(handleNext);
   const handlePrevRef = useRef(handlePrev);
@@ -253,6 +291,7 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
     position,
     duration,
     isSeeking,
+     isBuffering,
     setIsSeeking,
     togglePlay,
     handleNext,
@@ -262,5 +301,6 @@ export const usePlayer = (songs: SongProp[], songIndex: number, initialPosition?
     handleSeekBackward,
     handleSkipForward,
     panHandlers: panResponder.panHandlers,
+    queueSongs: queueSongsRef.current, // exposed so PlayerScreen indexes into the same fixed order
   };
 };

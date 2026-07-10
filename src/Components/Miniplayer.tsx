@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../util/theme/theme';
 import {
@@ -17,19 +17,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MiniPlayer = () => {
   const navigation = useNavigation<any>();
-  const { songs, deviceSong, favouriteSong, PlayList } = useAppSelector(
-    state => state.songs,
-  );
+  const { songs, deviceSong, favouriteSong, PlayList, recommendedSong } =
+    useAppSelector(state => state.songs);
 
   const {
     song,
     lastPlayed,
     playing,
     progressPercent,
+    isBuffering,
     togglePlay,
     handleNext,
     handlePrev,
-  } = useMiniPlayer(songs, deviceSong, favouriteSong, PlayList);
+  } = useMiniPlayer(
+    songs,
+    deviceSong,
+    favouriteSong,
+    PlayList,
+    recommendedSong ?? [],
+  );
 
   if (!song || !lastPlayed) return null;
 
@@ -69,8 +75,15 @@ const MiniPlayer = () => {
         >
           <PreviousSVG width={22} height={22} fill="#fff" />
         </ReuseButton>
-        <ReuseButton onPress={togglePlay} style={styles.playBtn} hitSlop={10}>
-          {playing ? (
+        <ReuseButton
+          onPress={togglePlay}
+          style={styles.playBtn}
+          hitSlop={10}
+          disabled={isBuffering}
+        >
+          {isBuffering ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : playing ? (
             <PauseSongSVG width={28} height={28} fill="#fff" />
           ) : (
             <PlaySongSVG width={28} height={28} fill="#fff" />

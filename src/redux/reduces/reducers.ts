@@ -1,8 +1,8 @@
-import { createSlice, isAnyOf, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { SongProp } from '../../util/const/Type';
 import { songs as offlineSongs } from '../../assets/OfflineSongs';
 import { SongsState } from '../../util/const/Type';
-import { AddFavourite, addToPlayList, createPlayList, deletPLayList, loadFavouriteSOng, loadPLayList, removeFromPlayList } from '../actions/actions';
+import { AddFavourite, addToPlayList, createPlayList, deletPLayList, loadFavouriteSOng, loadPLayList, loadRecommendedSongs, removeFromPlayList } from '../actions/actions';
 
 
 const initialState: SongsState = {
@@ -10,7 +10,8 @@ const initialState: SongsState = {
     deviceSong: [],
     favouriteSong: [],
     favouriteState: false,
-    PlayList: []
+    PlayList: [],
+    recommendedSong: []
 };
 
 const globleState = createSlice({
@@ -57,6 +58,10 @@ const globleState = createSlice({
 
         builder.addCase(removeFromPlayList.fulfilled, (state, action) => {
             state.PlayList = action.payload as any
+        })
+
+        builder.addCase(loadRecommendedSongs.fulfilled, (state, action) => {
+            state.recommendedSong = action.payload as any ?? []
         })
     }
 });

@@ -30,8 +30,9 @@ export type MarqueeTextProps = {
 export type lastPlayedData = {
   position: number;
   songIndex: number
-  source: 'offline' | 'device' | "favourite" | "playList";
+  source: 'offline' | 'device' | "favourite" | "playList"|"Reccomandation";
   playlistId?: string;
+  songId?:string
 
 }
 
@@ -41,6 +42,7 @@ export type SongsState = {
   favouriteSong: []
   favouriteState: boolean
   PlayList: PlaylistProp[]
+  recommendedSong?: any[]
 }
 
 export type ItemListProps = {
@@ -60,6 +62,7 @@ export type ItemListProps = {
   isAdded?: (item: any) => boolean;
   onToggleAdd?: (item: any, index: number) => void;
   Paddingbottom?: DimensionValue
+  ListHeaderComponent?:React.ReactElement | null
 };
 
 export type ItenCardProps = {
@@ -104,7 +107,7 @@ export type AppModalProps = {
   cardHeight?: DimensionValue;
   maxCardHeight?: DimensionValue;
   variant?: 'card' | 'fullscreen';
-  transparentBackdrop: boolean
+  transparentBackdrop?: boolean
 }
 
 export type TouchableProps = {
