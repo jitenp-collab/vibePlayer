@@ -15,9 +15,9 @@ const Songs = () => {
     state => state.songs,
   );
 
-  useEffect(() => {
-    console.log('Recommended song', recommendedSong);
-  }, [recommendedSong]);
+  // useEffect(() => {
+  //   console.log('Recommended song', recommendedSong);
+  // }, [recommendedSong]);
 
   return (
     <ItemList

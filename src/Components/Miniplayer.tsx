@@ -17,8 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const MiniPlayer = () => {
   const navigation = useNavigation<any>();
-  const { songs, deviceSong, favouriteSong, PlayList, recommendedSong } =
-    useAppSelector(state => state.songs);
+  const {
+    songs,
+    deviceSong,
+    favouriteSong,
+    PlayList,
+    recommendedSong,
+    songMoods,
+  } = useAppSelector(state => state.songs);
 
   const {
     song,
@@ -35,6 +41,7 @@ const MiniPlayer = () => {
     favouriteSong,
     PlayList,
     recommendedSong ?? [],
+    songMoods
   );
 
   if (!song || !lastPlayed) return null;
@@ -46,6 +53,7 @@ const MiniPlayer = () => {
       startPosition: lastPlayed.position,
       source: lastPlayed.source,
       playlistId: lastPlayed.playlistId,
+          mood: lastPlayed.mood
     });
   };
 
@@ -63,7 +71,7 @@ const MiniPlayer = () => {
         <FallbackImage uri={song.artwork} style={styles.artwork} />
 
         <View style={styles.info}>
-          <MarqueeText style={styles.title}>{song.title}</MarqueeText>
+          <MarqueeText key={song.id} style={styles.title}>{song.title}</MarqueeText>
           <Text style={styles.artist} numberOfLines={1}>
             {song.artist}
           </Text>

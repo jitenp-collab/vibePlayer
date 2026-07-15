@@ -2,6 +2,8 @@ import React from 'react';
 import { useAppDispatch } from '../redux/hook';
 import { useEffect } from 'react';
 import {
+  loadAnalysisData,
+  loadDeviceSongs,
   loadFavouriteSOng,
   loadPLayList,
   loadRecommendedSongs,
@@ -26,6 +28,14 @@ const LodResource = () => {
 
   useEffect(() => {
     dispatch(loadRecommendedSongs());
+  }, [dispatch]);
+
+  useEffect(() => {
+    dispatch(loadAnalysisData());
+  }, [dispatch]);
+
+  useEffect(() => {
+    dispatch(loadDeviceSongs());
   }, [dispatch]);
 
   return <Navigation />;

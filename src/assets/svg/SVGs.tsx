@@ -473,3 +473,17 @@ export function AddtoPLayListIcon(props:any) {
   </Svg>
   )
 }
+
+export const AiWaveformIcon = ( props:any ) => (
+  <Svg width={props.size} height={props.size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 15v-6" stroke={props.color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M8 17.5v-11" stroke={props.color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M12 13v-2" stroke={props.color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M16 17.5v-11" stroke={props.color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M20 15v-6" stroke={props.color} strokeWidth={2} strokeLinecap="round" />
+    <Path
+      d="M17.5 2.5L18.2 4.3L20 5L18.2 5.7L17.5 7.5L16.8 5.7L15 5L16.8 4.3Z"
+      fill={props.color}
+    />
+  </Svg>
+);

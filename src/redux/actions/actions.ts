@@ -1,7 +1,9 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import { FavouritSong, PlayListSong, PlayHistory } from "../../util/const/ConstName";
+import { FavouritSong, PlayListSong, PlayHistory, SongAnalysis,DeviceSongCache } from "../../util/const/ConstName";
 import { loadData, StoreData } from "../../util/Storage/asyncStorageHelper";
 import { PlaylistProp } from "../../util/const/Type";
+import { analyzeSong } from "../../customeHook/testDecode";
+import { setAnalysisProgress } from "../reduces/reducers";
 
 
 export const loadFavouriteSOng = createAsyncThunk("song/favourite", async () => {
@@ -27,6 +29,16 @@ export const AddFavourite = createAsyncThunk("song/addFavourite", async (item: a
         }
     } catch (error) {
         console.log("Error to add the song", error);
+    }
+})
+
+export const loadDeviceSongs = createAsyncThunk("song/loadDeviceSongs", async () => {
+    try {
+        const cached = await loadData(DeviceSongCache) ?? []
+        return cached
+    } catch (error) {
+        console.log("Error hydrating cached device songs", error)
+        return []
     }
 })
 
@@ -156,9 +168,102 @@ export const loadRecommendedSongs = createAsyncThunk(
                 .filter((s: any) => s.score > 0)
                 .sort((a: any, b: any) => b.score - a.score || a.playCount - b.playCount)
                 .map((s: any) => s.song)
-                // .slice(0, 10)
+                .slice(0, 10)
         } catch (error) {
             console.log("Error to load recommended songs", error)
         }
     }
 )
+
+import { resetStopAnalysis } from "../reduces/reducers"; // add to existing import line
+
+export const analyzeAndSaveSongs = createAsyncThunk(
+    "song/analyze",
+    async (songs: any[], { rejectWithValue, dispatch, getState }) => {
+        let stopWatcherId: ReturnType<typeof setInterval> | null = null;
+        try {
+            const saved = await loadData(SongAnalysis) ?? {}
+            const alreadyDone = songs.filter(song => saved[song.id]).length
+            const unanalyzed = songs.filter(song => !saved[song.id])
+
+            if (unanalyzed.length === 0) {
+                dispatch(setAnalysisProgress({ done: songs.length, total: songs.length, isAnalyzing: false }))
+                return saved
+            }
+
+            dispatch(resetStopAnalysis())
+            dispatch(setAnalysisProgress({ done: alreadyDone, total: songs.length, isAnalyzing: true }))
+
+            const wait = (ms: number) => new Promise((resolve: any) => setTimeout(resolve, ms))
+
+            // one shared "stop" signal, checked every 150ms, races against whatever
+            // song is currently being analyzed so a click takes effect immediately
+            const stopSignal = new Promise<'stopped'>(resolve => {
+                stopWatcherId = setInterval(() => {
+                    const st = getState() as any
+                    if (st.songs.stopRequested) {
+                        if (stopWatcherId) clearInterval(stopWatcherId)
+                        resolve('stopped')
+                    }
+                }, 150)
+            })
+
+            const analyzeOne = async (acc: { updated: any; count: number }, song: any) => {
+                const state = getState() as any
+                if (state.songs.stopRequested) return acc // nothing left to do this run
+
+                const outcome = await Promise.race([
+                    analyzeSong(song.id, song.url),
+                    stopSignal,
+                ])
+
+                if (outcome === 'stopped') {
+                    // don't count this song, don't save a partial result — bail now
+                    return acc
+                }
+
+                const result = outcome
+                if (result) {
+                    acc.updated[song.id] = result
+                    await StoreData(SongAnalysis, acc.updated)
+                }
+
+                acc.count += 1
+                dispatch(setAnalysisProgress({ done: alreadyDone + acc.count, total: songs.length, isAnalyzing: true }))
+
+                await wait(50)
+                return acc
+            }
+
+            const finalAcc = await unanalyzed.reduce(
+                (promiseChain, song) => promiseChain.then((acc: any) => analyzeOne(acc, song)),
+                Promise.resolve({ updated: { ...saved }, count: 0 })
+            )
+
+            dispatch(setAnalysisProgress({ done: alreadyDone + finalAcc.count, total: songs.length, isAnalyzing: false }))
+            dispatch(resetStopAnalysis())
+
+            return finalAcc.updated
+
+        } catch (error) {
+            console.log("Error to analyze songs", error)
+            dispatch(setAnalysisProgress({ done: 0, total: 0, isAnalyzing: false }))
+            return rejectWithValue(error)
+        } finally {
+            if (stopWatcherId) clearInterval(stopWatcherId)
+        }
+    }
+)
+
+export const loadAnalysisData = createAsyncThunk("song/hydrateAnalysis", async () => {
+    try {
+        const saved = await loadData(SongAnalysis) ?? {}
+        return saved
+    } catch (error) {
+        console.log("Error hydrating analysis data", error)
+        return {}
+    }
+})
+
+
+

@@ -7,7 +7,6 @@ import LodResource from './util/LodResource';
 
 const App = () => {
 
-
   return (
     <SafeAreaProvider>
       <Provider store={store}>

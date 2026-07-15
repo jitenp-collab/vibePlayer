@@ -5,31 +5,59 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { FolderSvg } from '../assets/svg/SVGs';
 import { colors } from '../util/theme/theme';
 import { useAudioPermission } from '../customeHook/useAudioPernission';
 import { useDeviceAudio } from '../customeHook/useDeviceAudio';
 import ItemList from '../ReusableComponent/ItemList';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation,useIsFocused } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../redux/hook';
-import { AddFavourite } from '../redux/actions/actions';
+import { AddFavourite, analyzeAndSaveSongs } from '../redux/actions/actions';
 import ReuseButton from '../ReusableComponent/ReuseButton';
+import AnalysisLoader from '../ReusableComponent/AnalysisLoader';
+import MoodSearch from './MoodSearch';
 
 const MediaSongComponent = () => {
-
+  const isFocused = useIsFocused();
   const { isAllowed, openSettings } = useAudioPermission();
   const { deviceSong, isLoading, error, refresh } = useDeviceAudio();
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
-  const { favouriteSong } = useAppSelector(state => state.songs);
+
+  const favouriteSong = useAppSelector(state => state.songs.favouriteSong);
+  const analysisProgress = useAppSelector(state => state.songs.analysisProgress);
+
+  const hasPartialProgress =
+    analysisProgress.done > 0 && analysisProgress.done < analysisProgress.total;
+
+  const [showAnalysisOverlay, setShowAnalysisOverlay] = useState(false);
+
+  useEffect(() => {
+    if (analysisProgress.isAnalyzing) {
+      setShowAnalysisOverlay(true);
+    }
+  }, [analysisProgress.isAnalyzing]);
+
+  const handleAnalyze = () => {
+    dispatch(analyzeAndSaveSongs(deviceSong));
+  };
+
+  const handleToggleFavourite = useCallback(
+    (item: any) => dispatch(AddFavourite(item)),
+    [dispatch],
+  );
+
+  const checkIsFavourite = useCallback(
+    (item: any) => favouriteSong.some((fav: any) => fav.id === item.id),
+    [favouriteSong],
+  );
 
 
-  // useEffect(() => {
-  //   console.log(deviceSong);
-  // }, [deviceSong]);
+  if (!isFocused) {
+    return <View style={{ flex: 1 }} />;
+  }
 
-  // Permission not granted
   if (!isAllowed) {
     return (
       <View style={styles.folderBox}>
@@ -44,7 +72,6 @@ const MediaSongComponent = () => {
     );
   }
 
-  // First-time loading (no files yet)
   if (isLoading && deviceSong.length === 0) {
     return (
       <View style={styles.folderBox}>
@@ -56,7 +83,6 @@ const MediaSongComponent = () => {
     );
   }
 
-  // Scan failed
   if (error && deviceSong.length === 0) {
     return (
       <View style={styles.folderBox}>
@@ -69,8 +95,18 @@ const MediaSongComponent = () => {
   }
 
   return (
-    <View>
-      <Text style={styles.allMedia}>All Media Songs</Text>
+    <View style={{ flex: 1 }}>
+      <View style={styles.headerRow}>
+        <Text style={styles.allMedia}>All Media Songs</Text>
+        {!analysisProgress.isAnalyzing && (
+          <ReuseButton onPress={handleAnalyze} style={styles.analyzeBtn}>
+            <Text style={styles.analyzeBtnText}>
+              {hasPartialProgress ? 'Resume Analysis' : 'Analyze'}
+            </Text>
+          </ReuseButton>
+        )}
+      </View>
+
       <ItemList
         data={deviceSong}
         keyExtractor={item => item.id}
@@ -100,17 +136,26 @@ const MediaSongComponent = () => {
             </Text>
           </View>
         }
-        onToggleFavourite={item => dispatch(AddFavourite(item))}
-        isFavourite={item =>
-          favouriteSong.some((fav: any) => fav.id === item.id)
-        }
+        onToggleFavourite={handleToggleFavourite}
+        isFavourite={checkIsFavourite}
         Paddingbottom={288}
       />
+
+      {showAnalysisOverlay && (
+        <AnalysisLoader
+          done={analysisProgress.done}
+          total={analysisProgress.total}
+          onClose={() => setShowAnalysisOverlay(false)}
+        />
+      )}
+      <MoodSearch />
     </View>
   );
 };
 
 export default MediaSongComponent;
+
+
 
 const styles = StyleSheet.create({
   folder: {
@@ -142,13 +187,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingStart: 15,
+    paddingEnd: 15,
+    paddingTop: 15,
+  },
+
   allMedia: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: 0.3,
-    paddingStart: 15,
-     paddingTop: 15,
+  },
+
+  analyzeBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  analyzeBtnText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   searchBar: {

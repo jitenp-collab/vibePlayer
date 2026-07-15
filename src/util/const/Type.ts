@@ -30,10 +30,10 @@ export type MarqueeTextProps = {
 export type lastPlayedData = {
   position: number;
   songIndex: number
-  source: 'offline' | 'device' | "favourite" | "playList"|"Reccomandation";
+  source: 'offline' | 'device' | "favourite" | "playList" | "Reccomandation" | "MoodSongs";
   playlistId?: string;
-  songId?:string
-
+  songId?: string
+  mood?: string
 }
 
 export type SongsState = {
@@ -43,6 +43,10 @@ export type SongsState = {
   favouriteState: boolean
   PlayList: PlaylistProp[]
   recommendedSong?: any[]
+  songAnalys: Record<string, SongFeatures>
+  songMoods: Record<string, MoodResult>
+  analysisProgress: { done: number; total: number; isAnalyzing: boolean }
+  stopRequested: boolean
 }
 
 export type ItemListProps = {
@@ -62,7 +66,7 @@ export type ItemListProps = {
   isAdded?: (item: any) => boolean;
   onToggleAdd?: (item: any, index: number) => void;
   Paddingbottom?: DimensionValue
-  ListHeaderComponent?:React.ReactElement | null
+  ListHeaderComponent?: React.ReactElement | null
 };
 
 export type ItenCardProps = {
@@ -137,3 +141,24 @@ export type ReuseInputProps = {
   multiline?: boolean;
   maxLength?: number;
 };
+
+
+
+export type SongFeatures = {
+  id?: string;
+  rms: number;
+  zcr: number;
+};
+
+export type MoodResult = SongFeatures & {
+  energyLevel: 'low' | 'high';
+  brightness: 'warm' | 'bright';
+  mood: 'chill' | 'airy' | 'energetic' | 'intense';
+};
+
+export type LoaderAnalys = {
+  done: number;
+  total: number;
+};
+
+export type Mood = 'energetic' | 'intense' | 'chill' | 'airy';

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet,ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors } from '../util/theme/theme';
@@ -27,6 +27,7 @@ import PlayListComponent from './PlayListComponent';
 import { PlaylistProp } from '../util/const/Type';
 import AppModal from '../ReusableComponent/AppMOdal';
 import ReuseButton from '../ReusableComponent/ReuseButton';
+import { shallowEqual } from 'react-redux';
 
 const PlayerScreen = () => {
   const navigation = useNavigation<any>();
@@ -40,15 +41,37 @@ const PlayerScreen = () => {
     startPosition,
     source = 'offline',
     playlistId,
+    mood,
   } = route.params as {
     songIndex: number;
     songId?: string;
     startPosition?: number;
-    source?: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation';
+    source?:
+      | 'offline'
+      | 'device'
+      | 'favourite'
+      | 'playList'
+      | 'Reccomandation'
+      | 'MoodSongs';
     playlistId: string;
+    mood?: string;
   };
-  const { songs, deviceSong, favouriteSong, PlayList, recommendedSong } =
-    useAppSelector(state => state.songs);
+  const songs = useAppSelector(state => state.songs.songs);
+  const deviceSong = useAppSelector(state => state.songs.deviceSong);
+  const favouriteSong = useAppSelector(state => state.songs.favouriteSong);
+  const PlayList = useAppSelector(state => state.songs.PlayList);
+  const recommendedSong = useAppSelector(state => state.songs.recommendedSong);
+  const songMoods = useAppSelector(state => state.songs.songMoods);
+
+  const [isSkipLocked, setIsSkipLocked] = useState(false);
+
+  const moodFilteredSongs = useMemo(
+    () =>
+      source === 'MoodSongs' && mood
+        ? deviceSong.filter((s: any) => songMoods[s.id]?.mood === mood)
+        : [],
+    [source, mood, deviceSong, songMoods],
+  );
 
   const playListSong =
     PlayList?.find((s: PlaylistProp) => s.id === playlistId)?.songs ?? [];
@@ -62,6 +85,8 @@ const PlayerScreen = () => {
       ? playListSong
       : source === 'Reccomandation'
       ? recommendedSong
+      : source === 'MoodSongs'
+      ? moodFilteredSongs
       : songs) ?? [];
 
   const foundIndex = songId ? selectedSong.findIndex(s => s.id === songId) : -1;
@@ -82,7 +107,14 @@ const PlayerScreen = () => {
     handleSkipForward,
     panHandlers,
     isBuffering,
-  } = usePlayer(selectedSong, initialIndex, startPosition, source, playlistId);
+  } = usePlayer(
+    selectedSong,
+    initialIndex,
+    startPosition,
+    source,
+    playlistId,
+    mood,
+  );
 
   const currentSong = selectedSong[currentIndex];
 
@@ -124,13 +156,27 @@ const PlayerScreen = () => {
     pl.songs?.some((s: any) => s.id === currentSong.id),
   );
 
-  const handleToggleFavourite = async () => {
+  const handleToggleFavourite = useCallback(async () => {
     try {
       await dispatch(AddFavourite(currentSong)).unwrap();
     } catch (error) {
       console.log('Failed to toggle favourite', error);
     }
-  };
+  }, [dispatch, currentSong]);
+
+  const guardedNext = useCallback(() => {
+    if (isSkipLocked) return;
+    setIsSkipLocked(true);
+    handleNext();
+    setTimeout(() => setIsSkipLocked(false), 400);
+  }, [isSkipLocked, handleNext]);
+
+  const guardedPrev = useCallback(() => {
+    if (isSkipLocked) return;
+    setIsSkipLocked(true);
+    handlePrev();
+    setTimeout(() => setIsSkipLocked(false), 400);
+  }, [isSkipLocked, handlePrev]);
 
   return (
     <View style={styles.container} {...panHandlers}>
@@ -162,7 +208,7 @@ const PlayerScreen = () => {
 
       <View style={styles.infoRow}>
         <View style={{ flex: 1 }}>
-          <MarqueeText style={styles.title}>{currentSong.title}</MarqueeText>
+          <MarqueeText key={currentSong.id} style={styles.title}>{currentSong.title}</MarqueeText>
           <Text style={styles.artist} numberOfLines={1}>
             Artist Name : {currentSong.artist}
           </Text>
@@ -202,10 +248,10 @@ const PlayerScreen = () => {
       </View>
 
       <View style={styles.controls}>
-        <ReuseButton onPress={handlePrev} style={styles.controlBtn}>
+        <ReuseButton onPress={guardedPrev} style={styles.controlBtn} disabled={isSkipLocked}>
           <PreviousSVG />
         </ReuseButton>
-        <ReuseButton onPress={handleSeekBackward} style={styles.controlBtn}>
+        <ReuseButton onPress={guardedNext} style={styles.controlBtn} disabled={isSkipLocked}>
           <RewindSongSVG />
         </ReuseButton>
         <ReuseButton

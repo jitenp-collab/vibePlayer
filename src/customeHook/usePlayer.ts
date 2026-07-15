@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event,PlaybackState  } from '@rntp/player';
+import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event, PlaybackState } from '@rntp/player';
 import { lastPlayedData, SongProp } from '../util/const/Type';
 import { PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,18 +28,18 @@ export const toMediaItem = (song: SongProp) => ({
 export const saveLastPlay = async (
   songIndex: number,
   position: number,
-  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' = 'offline',
+  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' | 'MoodSongs' = 'offline',
   playlistId?: string,
   songId?: string,
+  mood?: string,
 ) => {
   try {
-    const data: lastPlayedData = { songIndex, position, source, playlistId, songId };
+    const data: lastPlayedData = { songIndex, position, source, playlistId, songId, mood };
     await AsyncStorage.setItem(lastPlayedSong, JSON.stringify(data));
   } catch (error) {
     console.log('Failed to store song', error);
   }
 };
-
 export const getLastPlay = async () => {
   try {
     const raw = await AsyncStorage.getItem(lastPlayedSong);
@@ -51,40 +51,64 @@ export const getLastPlay = async () => {
   }
 };
 
-export const goToNext = (songs: SongProp[], currentIndex: number): number => {
+export const goToNext = async (songs: SongProp[], currentIndex: number): Promise<number> => {
   if (songs.length === 0) return currentIndex;
-  if (currentIndex < songs.length - 1) {
-    TrackPlayer.skipToNext();
-    return currentIndex + 1;
+  try {
+    const queueLen = TrackPlayer.getQueue().length;
+    if (queueLen !== songs.length) {
+      await TrackPlayer.setMediaItems(songs.map(toMediaItem), 0);
+      return 0;
+    }
+    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1); // FIX: clamp
+    if (safeCurrent < songs.length - 1) {
+      await TrackPlayer.skipToNext();
+      return safeCurrent + 1;
+    }
+    await TrackPlayer.skipToIndex(0);
+    return 0;
+  } catch (error) {
+    console.log('goToNext native error', error); // FIX: swallow native rejection, never let it bubble unhandled
+    return currentIndex;
   }
-  TrackPlayer.skipToIndex(0);
-  return 0;
 };
 
-export const goToPrev = (
+
+export const goToPrev = async (
   songs: SongProp[],
   currentIndex: number,
   position: number,
-): number => {
+): Promise<number> => {
   if (songs.length === 0) return currentIndex;
-  if (position > 3) {
-    TrackPlayer.seekTo(0);
+  try {
+    const queueLen = TrackPlayer.getQueue().length;
+    if (queueLen !== songs.length) {
+      await TrackPlayer.setMediaItems(songs.map(toMediaItem), songs.length - 1);
+      return songs.length - 1;
+    }
+    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1); // FIX: clamp
+    if (position > 3) {
+      await TrackPlayer.seekTo(0);
+      return safeCurrent;
+    }
+    if (safeCurrent > 0) {
+      await TrackPlayer.skipToPrevious();
+      return safeCurrent - 1;
+    }
+    await TrackPlayer.skipToIndex(songs.length - 1);
+    return songs.length - 1;
+  } catch (error) {
+    console.log('goToPrev native error', error);
     return currentIndex;
   }
-  if (currentIndex > 0) {
-    TrackPlayer.skipToPrevious();
-    return currentIndex - 1;
-  }
-  TrackPlayer.skipToIndex(songs.length - 1);
-  return songs.length - 1;
 };
 
 export const usePlayer = (
   songs: SongProp[],
   songIndex: number,
   initialPosition?: number,
-  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' = 'offline',
+  source: 'offline' | 'device' | 'favourite' | 'playList' | 'Reccomandation' | 'MoodSongs' = 'offline',
   playlistId?: string,
+  mood?: string,
 ) => {
   const [currentIndex, setCurrentIndex] = useState(songIndex);
   const [position, setPosition] = useState(0);
@@ -95,8 +119,14 @@ export const usePlayer = (
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastRecordedIndexRef = useRef<number | null>(null);
   const hasLoopedRef = useRef(false);
+  const recordPlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  
+
+  // FIX: real "one skip at a time" lock — prevents a second next/prev tap
+  // from firing a native skip call while a previous one is still in flight.
+  // This is what was causing the native player to crash under rapid tapping.
+  const skipLockRef = useRef(false);
+
   const queueSongsRef = useRef<SongProp[]>(songs);
 
   const playing = useIsPlaying();
@@ -104,9 +134,31 @@ export const usePlayer = (
 
   const dispatch = useAppDispatch();
 
+  const sessionKey = `${source}-${playlistId ?? ''}-${mood ?? ''}-${songs[0]?.id ?? ''}-${songIndex}`;
+  const lastSessionRef = useRef<string | null>(null);
+
+  const isTransitioningRef = useRef(false);
+
+  const withSkipLock = useCallback((fn: () => void) => {
+  if (isTransitioningRef.current) return; // a skip (manual OR auto-loop) is already in progress
+  isTransitioningRef.current = true;
+  try {
+    fn();
+  } finally {
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 350);
+  }
+}, []);
+
   // load queue + resume saved position if reopening the same song — runs once per
   // screen mount only. Deliberately NOT re-run when `songs` changes reference later.
+
   useEffect(() => {
+    if (lastSessionRef.current === sessionKey) return; // same session, don't reload
+    lastSessionRef.current = sessionKey;
+    queueSongsRef.current = songs; // keep ref in sync with the new list
+
     const initialSongs = queueSongsRef.current;
     if (!initialSongs || initialSongs.length === 0) return;
 
@@ -153,22 +205,30 @@ export const usePlayer = (
     };
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount only — see comment on queueSongsRef above
+  }, [sessionKey]);
+
 
   // sync index on track change
+
   useEffect(() => {
     const idx = TrackPlayer.getActiveMediaItemIndex();
     if (idx !== null && idx !== lastRecordedIndexRef.current) {
       lastRecordedIndexRef.current = idx;
       setCurrentIndex(idx);
       hasLoopedRef.current = false;
-      const playedSong = queueSongsRef.current[idx];
-      if (playedSong) {
-        dispatch(recordPlay(playedSong.id));
-        dispatch(loadRecommendedSongs());
-      }
+
+      recordPlayTimerRef.current = setTimeout(() => {
+  const playedSong = queueSongsRef.current[idx];
+  if (playedSong) {
+    dispatch(recordPlay(playedSong.id));
+    dispatch(loadRecommendedSongs());
+  }
+}, 600);
     }
+
+    return () => {
+      if (recordPlayTimerRef.current) clearTimeout(recordPlayTimerRef.current);
+    };
   }, [activeItem]);
 
   // poll progress + loop back to song 0 when the last song ends
@@ -187,10 +247,13 @@ export const usePlayer = (
         progress.duration > 0 && progress.position >= progress.duration - 0.5;
 
       if (isLastSong && nearEnd && !hasLoopedRef.current) {
+        if (isTransitioningRef.current) return; // don't fight a manual skip in progress
         hasLoopedRef.current = true;
+        isTransitioningRef.current = true;
         TrackPlayer.skipToIndex(0);
         TrackPlayer.play();
         setCurrentIndex(0);
+        setTimeout(() => { isTransitioningRef.current = false; }, 300);
       } else if (!nearEnd) {
         hasLoopedRef.current = false;
       }
@@ -202,42 +265,94 @@ export const usePlayer = (
   }, [isSeeking, currentIndex]);
 
   useEffect(() => {
-  const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, (event) => {
-    const idx = TrackPlayer.getActiveMediaItemIndex();
-    if (idx !== null) setCurrentIndex(idx);
+    const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, (event) => {
+      const idx = TrackPlayer.getActiveMediaItemIndex();
+      if (idx !== null) setCurrentIndex(idx);
 
-    if (event?.state !== undefined) {
-      setIsBuffering(event.state === PlaybackState.Buffering);
-    }
-  });
-  return () => sub.remove();
-}, []);
+      if (event?.state !== undefined) {
+        setIsBuffering(event.state === PlaybackState.Buffering);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (queueSongsRef.current.length === 0) return;
-    saveLastPlay(currentIndex, 0, source, playlistId, queueSongsRef.current[currentIndex]?.id);
-  }, [currentIndex, source, playlistId]);
+    saveLastPlay(currentIndex, 0, source, playlistId, queueSongsRef.current[currentIndex]?.id, mood);
+  }, [currentIndex, source, playlistId, mood]);
 
   const saveTickRef = useRef(0);
   useEffect(() => {
     if (queueSongsRef.current.length === 0) return;
     saveTickRef.current += 1;
     if (saveTickRef.current % 10 === 0) {
-      saveLastPlay(currentIndex, position, source, playlistId, queueSongsRef.current[currentIndex]?.id);
+      saveLastPlay(currentIndex, position, source, playlistId, queueSongsRef.current[currentIndex]?.id, mood);
     }
-  }, [position, currentIndex, source, playlistId]);
+  }, [position, currentIndex, source, playlistId, mood]);
 
   const togglePlay = useCallback(() => {
     playing ? TrackPlayer.pause() : TrackPlayer.play();
   }, [playing]);
 
+  // FIX: now wrapped in withSkipLock so a second tap can't fire while the
+  // previous skip is still being handled by the native player. Also clamps
+  // the computed index so we never ask the native side to jump to an
+  // out-of-range position.
   const handleNext = useCallback(() => {
-    setCurrentIndex(i => goToNext(queueSongsRef.current, i));
-  }, []);
+  withSkipLock(() => {
+    const list = queueSongsRef.current;
+    if (list.length === 0) return;
 
-  const handlePrev = useCallback(() => {
-    setCurrentIndex(i => goToPrev(queueSongsRef.current, i, position));
-  }, [position]);
+    const queueLen = TrackPlayer.getQueue().length;
+    let newIndex: number;
+
+    if (queueLen !== list.length) {
+      TrackPlayer.setMediaItems(list.map(toMediaItem), 0);
+      newIndex = 0;
+    } else if (currentIndex < list.length - 1) {
+      TrackPlayer.skipToNext();
+      newIndex = currentIndex + 1;
+    } else {
+      TrackPlayer.skipToIndex(0);
+      newIndex = 0;
+    }
+
+    newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
+    setPosition(0);
+    hasLoopedRef.current = false;
+    setCurrentIndex(newIndex);
+  });
+}, [currentIndex, withSkipLock]);
+
+
+ const handlePrev = useCallback(() => {
+  withSkipLock(() => {
+    const list = queueSongsRef.current;
+    if (list.length === 0) return;
+
+    const queueLen = TrackPlayer.getQueue().length;
+    let newIndex: number;
+
+    if (queueLen !== list.length) {
+      TrackPlayer.setMediaItems(list.map(toMediaItem), list.length - 1);
+      newIndex = list.length - 1;
+    } else if (position > 3) {
+      TrackPlayer.seekTo(0);
+      newIndex = currentIndex;
+    } else if (currentIndex > 0) {
+      TrackPlayer.skipToPrevious();
+      newIndex = currentIndex - 1;
+    } else {
+      TrackPlayer.skipToIndex(list.length - 1);
+      newIndex = list.length - 1;
+    }
+
+    newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
+    setPosition(0);
+    hasLoopedRef.current = false;
+    setCurrentIndex(newIndex);
+  });
+}, [currentIndex, position, withSkipLock]);
 
   const handleSeekForward = useCallback(() => {
     const newPosition = Math.min(position + 10, duration);
@@ -291,7 +406,7 @@ export const usePlayer = (
     position,
     duration,
     isSeeking,
-     isBuffering,
+    isBuffering,
     setIsSeeking,
     togglePlay,
     handleNext,
@@ -301,6 +416,6 @@ export const usePlayer = (
     handleSeekBackward,
     handleSkipForward,
     panHandlers: panResponder.panHandlers,
-    queueSongs: queueSongsRef.current, // exposed so PlayerScreen indexes into the same fixed order
+    queueSongs: queueSongsRef.current,
   };
 };

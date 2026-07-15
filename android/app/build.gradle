@@ -85,7 +85,11 @@ android {
         versionCode 1
         versionName "1.0"
     }
-
+ externalNativeBuild {
+        cmake {
+            buildStagingDirectory "C:/ndkbuild/vibePlayer"
+        }
+    }
      // 👇 ADD THIS BLOCK
     splits {
         abi {
