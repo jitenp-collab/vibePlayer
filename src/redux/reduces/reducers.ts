@@ -65,7 +65,6 @@ const globleState = createSlice({
        builder.addCase(loadDeviceSongs.fulfilled, (state, action) => {
     state.deviceSong = action.payload as any
 })
-
         builder.addCase(AddFavourite.fulfilled, (state, action) => {
             state.favouriteSong = action.payload?.list as any
             state.favouriteState = true

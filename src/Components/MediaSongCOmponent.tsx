@@ -11,7 +11,7 @@ import { colors } from '../util/theme/theme';
 import { useAudioPermission } from '../customeHook/useAudioPernission';
 import { useDeviceAudio } from '../customeHook/useDeviceAudio';
 import ItemList from '../ReusableComponent/ItemList';
-import { useNavigation,useIsFocused } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../redux/hook';
 import { AddFavourite, analyzeAndSaveSongs } from '../redux/actions/actions';
 import ReuseButton from '../ReusableComponent/ReuseButton';
@@ -26,7 +26,9 @@ const MediaSongComponent = () => {
   const dispatch = useAppDispatch();
 
   const favouriteSong = useAppSelector(state => state.songs.favouriteSong);
-  const analysisProgress = useAppSelector(state => state.songs.analysisProgress);
+  const analysisProgress = useAppSelector(
+    state => state.songs.analysisProgress,
+  );
 
   const hasPartialProgress =
     analysisProgress.done > 0 && analysisProgress.done < analysisProgress.total;
@@ -40,6 +42,7 @@ const MediaSongComponent = () => {
   }, [analysisProgress.isAnalyzing]);
 
   const handleAnalyze = () => {
+    setShowAnalysisOverlay(true);
     dispatch(analyzeAndSaveSongs(deviceSong));
   };
 
@@ -52,7 +55,6 @@ const MediaSongComponent = () => {
     (item: any) => favouriteSong.some((fav: any) => fav.id === item.id),
     [favouriteSong],
   );
-
 
   if (!isFocused) {
     return <View style={{ flex: 1 }} />;
@@ -138,7 +140,7 @@ const MediaSongComponent = () => {
         }
         onToggleFavourite={handleToggleFavourite}
         isFavourite={checkIsFavourite}
-        Paddingbottom={288}
+        Paddingbottom={240}
       />
 
       {showAnalysisOverlay && (
@@ -154,8 +156,6 @@ const MediaSongComponent = () => {
 };
 
 export default MediaSongComponent;
-
-
 
 const styles = StyleSheet.create({
   folder: {

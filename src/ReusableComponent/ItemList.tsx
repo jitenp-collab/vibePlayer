@@ -16,7 +16,7 @@ const ItemList = ({
   onPressItem,
   showIndex = true,
   ListEmptyComponent,
-  ListHeaderComponent, // <-- new
+  ListHeaderComponent, 
   refreshControl,
   isFavourite,
   onToggleFavourite,

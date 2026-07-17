@@ -59,9 +59,10 @@ const ItemCard = ({
         <View style={styles.info} collapsable={false}>
           <MarqueeText style={styles.title}>{getTitle(item)}</MarqueeText>
           {subtitle ? (
-            <Text style={styles.artist} numberOfLines={1}>
-              {subtitle}
-            </Text>
+            <MarqueeText style={styles.artist} >{subtitle}</MarqueeText>
+            // <Text style={styles.artist} numberOfLines={1}>
+            //   {subtitle} 
+            // </Text>
           ) : null}
         </View>
 

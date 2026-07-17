@@ -5,11 +5,11 @@ import { MarqueeTextProps } from '../util/const/Type';
 const MarqueeText = ({
   children,
   style,
-  duration = 18000,
+  duration = 20000,
   loop = true,
   bounce = false,
   repeatSpacer = 70,
-  marqueeDelay = 1000,
+  marqueeDelay = 2000,
   scrollSpeed,
 }: MarqueeTextProps) => {
   const translateX = useRef(new Animated.Value(0)).current;

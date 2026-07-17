@@ -43,7 +43,7 @@ const FavouriteSOngCOmponent = ({
             favouriteSong.some((fav: any) => fav.id === item.id)
           }
           onToggleFavourite={item => dispatch(AddFavourite(item))}
-          Paddingbottom={hidePad === undefined ? 170 : 0}
+          Paddingbottom={hidePad === undefined ? 180 : 0}
         />
       ) : (
         <View style={styles.buttonBox}>

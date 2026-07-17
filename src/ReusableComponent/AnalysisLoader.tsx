@@ -1,3 +1,4 @@
+// ReusableComponent/AnalysisLoader.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../util/theme/theme';
@@ -9,7 +10,12 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
   const { stopRequested, analysisProgress } = useAppSelector(
     state => state.songs,
   );
-  const [showComplete, setShowComplete] = useState(false);
+
+  // if this mounts when everything's already analyzed, show the complete
+  // card right away instead of the in-progress one
+  const [showComplete, setShowComplete] = useState(
+    () => !analysisProgress.isAnalyzing && total > 0 && done === total,
+  );
   const wasAnalyzing = useRef(analysisProgress.isAnalyzing);
 
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -18,7 +24,6 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
     const justFinished = wasAnalyzing.current && !analysisProgress.isAnalyzing;
     wasAnalyzing.current = analysisProgress.isAnalyzing;
 
-    // started or resumed — make sure any old "complete" state is cleared
     if (analysisProgress.isAnalyzing) {
       setShowComplete(false);
       return;
@@ -28,21 +33,12 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
 
     if (total > 0 && done === total) {
       setShowComplete(true);
-      const timer = setTimeout(() => {
-        setShowComplete(false);
-        onClose?.();
-      }, 2500);
-      return () => clearTimeout(timer);
+    } else {
+      // stopped early — just close, no extra message
+      onClose?.();
     }
-
-    // stopped early — just close, no extra message
-    onClose?.();
   }, [analysisProgress.isAnalyzing, done, total, onClose]);
 
-  // FIX: manual close — dismisses the overlay immediately regardless of
-  // stopRequested/analyzing state, so the user is never stuck on this screen.
-  // Note: this only hides the overlay, it does NOT stop the background
-  // analysis job itself (that's still controlled separately by "Stop for now").
   const handleManualClose = () => {
     setShowComplete(false);
     onClose?.();
@@ -68,9 +64,6 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
   return (
     <View style={styles.overlay}>
       <View style={styles.card}>
-        {/* <TouchableOpacity style={styles.closeBtn} onPress={handleManualClose}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity> */}
         <Text style={styles.title}>
           {stopRequested ? 'Stopping…' : 'Analyzing your music'}
         </Text>
@@ -102,6 +95,8 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
 };
 
 export default AnalysisLoader;
+
+// styles unchanged from your original — closeBtn/closeBtnText etc. all stay
 
 const styles = StyleSheet.create({
   overlay: {

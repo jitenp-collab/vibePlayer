@@ -1,11 +1,8 @@
 import RNFS from 'react-native-fs';
-import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
+import { pick, keepLocalCopy, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { Platform } from 'react-native';
 
 const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.wav', '.aac', '.flac', '.ogg', '.opus', '.wma'];
-
-
-
 const SKIP_FOLDERS = ['Android', '.thumbnails', '.trashed'];
 
 const isAudioFile = (fileName: string) =>
@@ -34,7 +31,6 @@ const scanFolder = async (path: string) => {
   return results;
 };
 
-
 const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
   try {
     const pickedFiles = await pick({
@@ -42,17 +38,34 @@ const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
       allowMultiSelection: true,
     });
 
-    return pickedFiles
-      .filter(file => isAudioFile(file.name ?? ''))
-      .map(file => ({
-        name: file.name ?? 'Unknown',
-        path: file.uri, // already a full usable iOS file URI
-        size: file.size ?? 0,
-        ctime: undefined,
-        mtime: undefined,
-        isFile: () => true,
-        isDirectory: () => false,
-      })) as unknown as RNFS.ReadDirItem[];
+    const audioFiles = pickedFiles.filter(file => isAudioFile(file.name ?? ''));
+    if (audioFiles.length === 0) return [];
+
+    // iOS only keeps the picker's uri readable for a short window — copy into app storage
+    
+    // so both playback AND tag-reading (jsmediatags) can read the file anytime after this.
+
+    // cast to non-empty tuple: keepLocalCopy's type requires it, and length is already checked above
+
+    const filesToCopy = audioFiles.map(f => ({ uri: f.uri, fileName: f.name ?? 'unknown' })) as [
+      { uri: string; fileName: string },
+      ...{ uri: string; fileName: string }[],
+    ];
+
+    const localCopies = await keepLocalCopy({
+      files: filesToCopy,
+      destination: 'documentDirectory',
+    });
+
+    return audioFiles.map((file, i) => ({
+      name: file.name ?? 'Unknown',
+      path: localCopies[i]?.status === 'success' ? localCopies[i].localUri : file.uri, // fall back if copy failed
+      size: file.size ?? 0,
+      ctime: undefined,
+      mtime: undefined,
+      isFile: () => true,
+      isDirectory: () => false,
+    })) as unknown as RNFS.ReadDirItem[];
   } catch (error) {
     if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
       return [];
@@ -62,17 +75,11 @@ const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
   }
 };
 
-
 export const getDeviceAudioFiles = async () => {
-
-  if (Platform.OS === "ios") {
-    return getDeviceAudioFilesIOS()
+  if (Platform.OS === 'ios') {
+    return getDeviceAudioFilesIOS();
   }
 
   const rootPath = RNFS.ExternalStorageDirectoryPath;
-  const allFiles = await scanFolder(rootPath);
-
-  // console.log(`Total audio files found: ${allFiles}`);
-  // console.log(`Total audio files found: ${allFiles}`);
-  return allFiles;
+  return scanFolder(rootPath);
 };

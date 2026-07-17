@@ -1,3 +1,4 @@
+// customeHook/usePlayer.ts
 import { useEffect, useState, useCallback, useRef } from 'react';
 import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event, PlaybackState } from '@rntp/player';
 import { lastPlayedData, SongProp } from '../util/const/Type';
@@ -5,12 +6,12 @@ import { PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lastPlayedSong } from '../util/const/ConstName';
 import { useAppDispatch } from '../redux/hook';
-import { recordPlay } from '../redux/actions/actions';
-import { loadRecommendedSongs } from '../redux/actions/actions';
+import { recordPlay, loadRecommendedSongs } from '../redux/actions/actions';
 
 const SWIPE_THRESHOLD = 50;
 const DIRECTION_LOCK_THRESHOLD = 20;
 
+// formats raw seconds into "m:ss" for UI display
 export const formatTime = (secs: number): string => {
   if (!secs || isNaN(secs) || secs < 0) return '0:00';
   const m = Math.floor(secs / 60);
@@ -18,12 +19,39 @@ export const formatTime = (secs: number): string => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
+// maps our SongProp shape to what the native player expects
 export const toMediaItem = (song: SongProp) => ({
   url: song.url,
   title: song.title,
   artist: song.artist,
   artworkUrl: song.artwork,
 });
+
+// REUSABLE: shared skip-lock hook used by usePlayer + useMiniPlayer — stops a double-tap firing two skips at once
+export const useSkipLock = (lockMs = 350) => {
+  const isTransitioningRef = useRef(false);
+  const withSkipLock = useCallback((fn: () => Promise<void> | void) => {
+    if (isTransitioningRef.current) return; // a skip is already in flight, ignore this call
+    isTransitioningRef.current = true;
+    Promise.resolve()
+      .then(fn) // works for both sync and async fn bodies
+      .catch(error => console.log('skip lock error', error)) // never let a native rejection bubble unhandled
+      .finally(() => {
+        setTimeout(() => { isTransitioningRef.current = false; }, lockMs); // release lock after cooldown
+      });
+  }, [lockMs]);
+  return { withSkipLock, isTransitioningRef };
+};
+
+// REUSABLE: shared safe-progress reader used by both hooks' polling loops, clamped to >= 0
+export const readProgress = () => {
+  try {
+    const p = TrackPlayer.getProgress();
+    return { position: Math.max(0, p.position || 0), duration: Math.max(0, p.duration || 0) };
+  } catch (error) {
+    return null; // native side may briefly be mid-transition
+  }
+};
 
 export const saveLastPlay = async (
   songIndex: number,
@@ -35,11 +63,12 @@ export const saveLastPlay = async (
 ) => {
   try {
     const data: lastPlayedData = { songIndex, position, source, playlistId, songId, mood };
-    await AsyncStorage.setItem(lastPlayedSong, JSON.stringify(data));
+    await AsyncStorage.setItem(lastPlayedSong, JSON.stringify(data)); // persist last-played state
   } catch (error) {
     console.log('Failed to store song', error);
   }
 };
+
 export const getLastPlay = async () => {
   try {
     const raw = await AsyncStorage.getItem(lastPlayedSong);
@@ -51,28 +80,32 @@ export const getLastPlay = async () => {
   }
 };
 
+// moves the queue forward one song, reloading the queue first if it's drifted out of sync
 export const goToNext = async (songs: SongProp[], currentIndex: number): Promise<number> => {
   if (songs.length === 0) return currentIndex;
   try {
     const queueLen = TrackPlayer.getQueue().length;
     if (queueLen !== songs.length) {
-      await TrackPlayer.setMediaItems(songs.map(toMediaItem), 0);
+      // await 
+      TrackPlayer.setMediaItems(songs.map(toMediaItem), 0); // queue drifted, reload it
       return 0;
     }
-    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1); // FIX: clamp
+    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1); // clamp to valid range
     if (safeCurrent < songs.length - 1) {
-      await TrackPlayer.skipToNext();
+      // await 
+      TrackPlayer.skipToNext();
       return safeCurrent + 1;
     }
-    await TrackPlayer.skipToIndex(0);
+    // await
+     TrackPlayer.skipToIndex(0); // wrap back to start
     return 0;
   } catch (error) {
-    console.log('goToNext native error', error); // FIX: swallow native rejection, never let it bubble unhandled
+    console.log('goToNext native error', error); // swallow native rejection, never let it bubble unhandled
     return currentIndex;
   }
 };
 
-
+// moves the queue back one song, or restarts the current song if already a few seconds in
 export const goToPrev = async (
   songs: SongProp[],
   currentIndex: number,
@@ -82,19 +115,23 @@ export const goToPrev = async (
   try {
     const queueLen = TrackPlayer.getQueue().length;
     if (queueLen !== songs.length) {
-      await TrackPlayer.setMediaItems(songs.map(toMediaItem), songs.length - 1);
+      // await
+       TrackPlayer.setMediaItems(songs.map(toMediaItem), songs.length - 1); // queue drifted, reload it
       return songs.length - 1;
     }
-    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1); // FIX: clamp
+    const safeCurrent = Math.min(Math.max(currentIndex, 0), songs.length - 1);
     if (position > 3) {
-      await TrackPlayer.seekTo(0);
+      // await 
+      TrackPlayer.seekTo(0); // restart current song instead of going back
       return safeCurrent;
     }
     if (safeCurrent > 0) {
-      await TrackPlayer.skipToPrevious();
+      // await
+       TrackPlayer.skipToPrevious();
       return safeCurrent - 1;
     }
-    await TrackPlayer.skipToIndex(songs.length - 1);
+    // await
+     TrackPlayer.skipToIndex(songs.length - 1); // wrap back to end
     return songs.length - 1;
   } catch (error) {
     console.log('goToPrev native error', error);
@@ -117,43 +154,21 @@ export const usePlayer = (
   const [isBuffering, setIsBuffering] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastRecordedIndexRef = useRef<number | null>(null);
-  const hasLoopedRef = useRef(false);
+  const lastRecordedIndexRef = useRef<number | null>(null); // last index we already recorded a play for
+  const hasLoopedRef = useRef(false); // guards against looping to song 0 more than once per queue-end
   const recordPlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueSongsRef = useRef<SongProp[]>(songs); // always-current queue snapshot, avoids stale closures
 
-
-  // FIX: real "one skip at a time" lock — prevents a second next/prev tap
-  // from firing a native skip call while a previous one is still in flight.
-  // This is what was causing the native player to crash under rapid tapping.
-  const skipLockRef = useRef(false);
-
-  const queueSongsRef = useRef<SongProp[]>(songs);
+  const { withSkipLock, isTransitioningRef } = useSkipLock(); // shared next/prev lock
 
   const playing = useIsPlaying();
   const activeItem = useActiveMediaItem();
-
   const dispatch = useAppDispatch();
 
   const sessionKey = `${source}-${playlistId ?? ''}-${mood ?? ''}-${songs[0]?.id ?? ''}-${songIndex}`;
   const lastSessionRef = useRef<string | null>(null);
 
-  const isTransitioningRef = useRef(false);
-
-  const withSkipLock = useCallback((fn: () => void) => {
-  if (isTransitioningRef.current) return; // a skip (manual OR auto-loop) is already in progress
-  isTransitioningRef.current = true;
-  try {
-    fn();
-  } finally {
-    setTimeout(() => {
-      isTransitioningRef.current = false;
-    }, 350);
-  }
-}, []);
-
-  // load queue + resume saved position if reopening the same song — runs once per
-  // screen mount only. Deliberately NOT re-run when `songs` changes reference later.
-
+  // load queue + resume saved position — runs once per screen mount/session only
   useEffect(() => {
     if (lastSessionRef.current === sessionKey) return; // same session, don't reload
     lastSessionRef.current = sessionKey;
@@ -164,7 +179,6 @@ export const usePlayer = (
 
     const init = async () => {
       const safeIndex = Math.min(Math.max(songIndex, 0), initialSongs.length - 1);
-
       const activeIdx = TrackPlayer.getActiveMediaItemIndex();
       const activeQueue = TrackPlayer.getQueue();
 
@@ -179,9 +193,7 @@ export const usePlayer = (
         setCurrentIndex(activeIdx);
         setPosition(progress.position);
         setDuration(progress.duration);
-        if (!TrackPlayer.isPlaying()) {
-          TrackPlayer.play();
-        }
+        if (!TrackPlayer.isPlaying()) TrackPlayer.play();
         return;
       }
 
@@ -207,9 +219,7 @@ export const usePlayer = (
     init();
   }, [sessionKey]);
 
-
-  // sync index on track change
-
+  // sync currentIndex on track change + record play for recommendations after a short delay
   useEffect(() => {
     const idx = TrackPlayer.getActiveMediaItemIndex();
     if (idx !== null && idx !== lastRecordedIndexRef.current) {
@@ -218,12 +228,12 @@ export const usePlayer = (
       hasLoopedRef.current = false;
 
       recordPlayTimerRef.current = setTimeout(() => {
-  const playedSong = queueSongsRef.current[idx];
-  if (playedSong) {
-    dispatch(recordPlay(playedSong.id));
-    dispatch(loadRecommendedSongs());
-  }
-}, 600);
+        const playedSong = queueSongsRef.current[idx];
+        if (playedSong) {
+          dispatch(recordPlay(playedSong.id));
+          dispatch(loadRecommendedSongs());
+        }
+      }, 600);
     }
 
     return () => {
@@ -231,20 +241,20 @@ export const usePlayer = (
     };
   }, [activeItem]);
 
-  // poll progress + loop back to song 0 when the last song ends
+  // poll playback progress + auto-loop back to song 0 when the last song ends
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      if (isSeeking) return;
+      if (isSeeking) return; // don't fight a manual seek in progress
       const list = queueSongsRef.current;
-      if (list.length === 0) return; // guard
+      if (list.length === 0) return;
 
-      const progress = TrackPlayer.getProgress();
+      const progress = readProgress();
+      if (!progress) return;
       setPosition(progress.position);
       setDuration(progress.duration);
 
       const isLastSong = currentIndex === list.length - 1;
-      const nearEnd =
-        progress.duration > 0 && progress.position >= progress.duration - 0.5;
+      const nearEnd = progress.duration > 0 && progress.position >= progress.duration - 0.5;
 
       if (isLastSong && nearEnd && !hasLoopedRef.current) {
         if (isTransitioningRef.current) return; // don't fight a manual skip in progress
@@ -264,23 +274,23 @@ export const usePlayer = (
     };
   }, [isSeeking, currentIndex]);
 
+  // keep isBuffering + currentIndex in sync with native playback state changes
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackStateChanged, (event) => {
       const idx = TrackPlayer.getActiveMediaItemIndex();
       if (idx !== null) setCurrentIndex(idx);
-
-      if (event?.state !== undefined) {
-        setIsBuffering(event.state === PlaybackState.Buffering);
-      }
+      if (event?.state !== undefined) setIsBuffering(event.state === PlaybackState.Buffering);
     });
     return () => sub.remove();
   }, []);
 
+  // persist last-played song immediately whenever the current song changes
   useEffect(() => {
     if (queueSongsRef.current.length === 0) return;
     saveLastPlay(currentIndex, 0, source, playlistId, queueSongsRef.current[currentIndex]?.id, mood);
   }, [currentIndex, source, playlistId, mood]);
 
+  // periodically persist playback position too (every ~10th tick), so resume works after a kill
   const saveTickRef = useRef(0);
   useEffect(() => {
     if (queueSongsRef.current.length === 0) return;
@@ -294,74 +304,69 @@ export const usePlayer = (
     playing ? TrackPlayer.pause() : TrackPlayer.play();
   }, [playing]);
 
-  // FIX: now wrapped in withSkipLock so a second tap can't fire while the
-  // previous skip is still being handled by the native player. Also clamps
-  // the computed index so we never ask the native side to jump to an
-  // out-of-range position.
+  // skip forward one song, reloading the queue first if it's drifted out of sync
   const handleNext = useCallback(() => {
-  withSkipLock(() => {
-    const list = queueSongsRef.current;
-    if (list.length === 0) return;
+    withSkipLock(() => {
+      const list = queueSongsRef.current;
+      if (list.length === 0) return;
 
-    const queueLen = TrackPlayer.getQueue().length;
-    let newIndex: number;
+      const queueLen = TrackPlayer.getQueue().length;
+      let newIndex: number;
 
-    if (queueLen !== list.length) {
-      TrackPlayer.setMediaItems(list.map(toMediaItem), 0);
-      newIndex = 0;
-    } else if (currentIndex < list.length - 1) {
-      TrackPlayer.skipToNext();
-      newIndex = currentIndex + 1;
-    } else {
-      TrackPlayer.skipToIndex(0);
-      newIndex = 0;
-    }
+      if (queueLen !== list.length) {
+        TrackPlayer.setMediaItems(list.map(toMediaItem), 0);
+        newIndex = 0;
+      } else if (currentIndex < list.length - 1) {
+        TrackPlayer.skipToNext();
+        newIndex = currentIndex + 1;
+      } else {
+        TrackPlayer.skipToIndex(0);
+        newIndex = 0;
+      }
 
-    newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
-    setPosition(0);
-    hasLoopedRef.current = false;
-    setCurrentIndex(newIndex);
-  });
-}, [currentIndex, withSkipLock]);
+      newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
+      setPosition(0);
+      hasLoopedRef.current = false;
+      setCurrentIndex(newIndex);
+    });
+  }, [currentIndex, withSkipLock]);
 
+  // skip back one song, or restart current song if already a few seconds in
+  const handlePrev = useCallback(() => {
+    withSkipLock(() => {
+      const list = queueSongsRef.current;
+      if (list.length === 0) return;
 
- const handlePrev = useCallback(() => {
-  withSkipLock(() => {
-    const list = queueSongsRef.current;
-    if (list.length === 0) return;
+      const queueLen = TrackPlayer.getQueue().length;
+      let newIndex: number;
 
-    const queueLen = TrackPlayer.getQueue().length;
-    let newIndex: number;
+      if (queueLen !== list.length) {
+        TrackPlayer.setMediaItems(list.map(toMediaItem), list.length - 1);
+        newIndex = list.length - 1;
+      } else if (position > 3) {
+        TrackPlayer.seekTo(0);
+        newIndex = currentIndex;
+      } else if (currentIndex > 0) {
+        TrackPlayer.skipToPrevious();
+        newIndex = currentIndex - 1;
+      } else {
+        TrackPlayer.skipToIndex(list.length - 1);
+        newIndex = list.length - 1;
+      }
 
-    if (queueLen !== list.length) {
-      TrackPlayer.setMediaItems(list.map(toMediaItem), list.length - 1);
-      newIndex = list.length - 1;
-    } else if (position > 3) {
-      TrackPlayer.seekTo(0);
-      newIndex = currentIndex;
-    } else if (currentIndex > 0) {
-      TrackPlayer.skipToPrevious();
-      newIndex = currentIndex - 1;
-    } else {
-      TrackPlayer.skipToIndex(list.length - 1);
-      newIndex = list.length - 1;
-    }
-
-    newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
-    setPosition(0);
-    hasLoopedRef.current = false;
-    setCurrentIndex(newIndex);
-  });
-}, [currentIndex, position, withSkipLock]);
+      newIndex = Math.min(Math.max(newIndex, 0), list.length - 1);
+      setPosition(0);
+      hasLoopedRef.current = false;
+      setCurrentIndex(newIndex);
+    });
+  }, [currentIndex, position, withSkipLock]);
 
   const handleSeekForward = useCallback(() => {
-    const newPosition = Math.min(position + 10, duration);
-    TrackPlayer.seekTo(newPosition);
+    TrackPlayer.seekTo(Math.min(position + 10, duration));
   }, [position, duration]);
 
   const handleSeekBackward = useCallback(() => {
-    const newPosition = Math.max(position - 10, 0);
-    TrackPlayer.seekTo(newPosition);
+    TrackPlayer.seekTo(Math.max(position - 10, 0));
   }, [position]);
 
   const handleSeekComplete = useCallback((value: number) => {
@@ -369,6 +374,7 @@ export const usePlayer = (
     setIsSeeking(false);
   }, []);
 
+  // jumps ahead 2 songs, wrapping around the queue (used for a "skip preview" gesture)
   const handleSkipForward = useCallback(() => {
     const list = queueSongsRef.current;
     if (list.length === 0) return; // guard against % 0
@@ -377,6 +383,7 @@ export const usePlayer = (
     setCurrentIndex(targetIndex);
   }, [currentIndex]);
 
+  // refs so PanResponder always calls the latest handler, without recreating the responder
   const handleNextRef = useRef(handleNext);
   const handlePrevRef = useRef(handlePrev);
   handleNextRef.current = handleNext;
@@ -384,18 +391,12 @@ export const usePlayer = (
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return (
-          Math.abs(gestureState.dx) > DIRECTION_LOCK_THRESHOLD &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
-        );
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > DIRECTION_LOCK_THRESHOLD &&
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx <= -SWIPE_THRESHOLD) {
-          handleNextRef.current();
-        } else if (gestureState.dx >= SWIPE_THRESHOLD) {
-          handlePrevRef.current();
-        }
+        if (gestureState.dx <= -SWIPE_THRESHOLD) handleNextRef.current();
+        else if (gestureState.dx >= SWIPE_THRESHOLD) handlePrevRef.current();
       },
     }),
   ).current;

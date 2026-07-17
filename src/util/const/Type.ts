@@ -16,6 +16,14 @@ export type SongProp = {
   url: string;
 };
 
+// raw tag data read from a file via jsmediatags — either field may be missing if untagged
+export type AudioTagResult = {
+  title?: string;
+  artist?: string;
+  artwork?: string; // add this line
+  movie?:string
+};
+
 export type MarqueeTextProps = {
   children: React.ReactNode;
   style?: StyleProp<TextStyle>;
@@ -141,7 +149,6 @@ export type ReuseInputProps = {
   multiline?: boolean;
   maxLength?: number;
 };
-
 
 
 export type SongFeatures = {

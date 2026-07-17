@@ -116,67 +116,71 @@ const PlayerScreen = () => {
     mood,
   );
 
-  const currentSong = selectedSong[currentIndex];
+ const currentSong = selectedSong[currentIndex];
 
-  useEffect(() => {
-    if (source !== 'favourite') return;
+useEffect(() => {
+  if (source !== 'favourite') return;
 
-    if (favouriteSong.length === 0) {
+  if (favouriteSong.length === 0) {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'TabComponent' }],
+    });
+    return;
+  }
+
+  if (
+    currentSong &&
+    !favouriteSong.some((s: any) => s.id === currentSong.id)
+  ) {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
       navigation.reset({
         index: 0,
         routes: [{ name: 'TabComponent' }],
       });
-      return;
     }
-
-    if (
-      currentSong &&
-      !favouriteSong.some((s: any) => s.id === currentSong.id)
-    ) {
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'TabComponent' }],
-        });
-      }
-    }
-  }, [source, favouriteSong, currentSong, navigation]);
-
-  if (!currentSong) {
-    return null;
   }
+}, [source, favouriteSong, currentSong, navigation]);
 
-  const isFavourite = favouriteSong.some(
-    (data: any) => data.id === currentSong.id,
-  );
+// Moved above the early return — these must run on every render, no exceptions.
+const handleToggleFavourite = useCallback(async () => {
+  if (!currentSong) return; // currentSong may briefly be undefined here now — guard inside instead
+  try {
+    await dispatch(AddFavourite(currentSong)).unwrap();
+  } catch (error) {
+    console.log('Failed to toggle favourite', error);
+  }
+}, [dispatch, currentSong]);
 
-  const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
-    pl.songs?.some((s: any) => s.id === currentSong.id),
-  );
+const guardedNext = useCallback(() => {
+  if (isSkipLocked) return;
+  setIsSkipLocked(true);
+  handleNext();
+  setTimeout(() => setIsSkipLocked(false), 400);
+}, [isSkipLocked, handleNext]);
 
-  const handleToggleFavourite = useCallback(async () => {
-    try {
-      await dispatch(AddFavourite(currentSong)).unwrap();
-    } catch (error) {
-      console.log('Failed to toggle favourite', error);
-    }
-  }, [dispatch, currentSong]);
+const guardedPrev = useCallback(() => {
+  if (isSkipLocked) return;
+  setIsSkipLocked(true);
+  handlePrev();
+  setTimeout(() => setIsSkipLocked(false), 400);
+}, [isSkipLocked, handlePrev]);
 
-  const guardedNext = useCallback(() => {
-    if (isSkipLocked) return;
-    setIsSkipLocked(true);
-    handleNext();
-    setTimeout(() => setIsSkipLocked(false), 400);
-  }, [isSkipLocked, handleNext]);
+// NOW it's safe to return early — every hook above this line runs on every render, always.
 
-  const guardedPrev = useCallback(() => {
-    if (isSkipLocked) return;
-    setIsSkipLocked(true);
-    handlePrev();
-    setTimeout(() => setIsSkipLocked(false), 400);
-  }, [isSkipLocked, handlePrev]);
+if (!currentSong) {
+  return null;
+}
+
+const isFavourite = favouriteSong.some(
+  (data: any) => data.id === currentSong.id,
+);
+
+const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
+  pl.songs?.some((s: any) => s.id === currentSong.id),
+);
 
   return (
     <View style={styles.container} {...panHandlers}>
@@ -208,11 +212,18 @@ const PlayerScreen = () => {
 
       <View style={styles.infoRow}>
         <View style={{ flex: 1 }}>
-          <MarqueeText key={currentSong.id} style={styles.title}>{currentSong.title}</MarqueeText>
-          <Text style={styles.artist} numberOfLines={1}>
-            Artist Name : {currentSong.artist}
+          <MarqueeText key={currentSong.id} style={styles.title}>
+            {currentSong.title}
+          </MarqueeText>
+          <View>
+            <Text style={styles.artist}>
+              Artist Name : {currentSong.artist}
+            </Text>
+          </View>
+
+          <Text style={styles.artist}>
+            Movie name : {currentSong.movie }
           </Text>
-          <Text style={styles.artist}>Movie name : {currentSong.movie} </Text>
         </View>
         <Text style={styles.counter}>
           {currentIndex + 1}/{selectedSong.length}
@@ -248,10 +259,18 @@ const PlayerScreen = () => {
       </View>
 
       <View style={styles.controls}>
-        <ReuseButton onPress={guardedPrev} style={styles.controlBtn} disabled={isSkipLocked}>
+        <ReuseButton
+          onPress={guardedPrev}
+          style={styles.controlBtn}
+          disabled={isSkipLocked}
+        >
           <PreviousSVG />
         </ReuseButton>
-        <ReuseButton onPress={guardedNext} style={styles.controlBtn} disabled={isSkipLocked}>
+        <ReuseButton
+          onPress={guardedNext}
+          style={styles.controlBtn}
+          disabled={isSkipLocked}
+        >
           <RewindSongSVG />
         </ReuseButton>
         <ReuseButton

@@ -5,7 +5,7 @@ import { useAppDispatch, useAppSelector } from "../redux/hook"
 import { deviceFilesToSongs } from "./deviceAudioTosong"
 import { setDeviceSong, computeMoods } from "../redux/reduces/reducers"
 import { StoreData } from "../util/Storage/asyncStorageHelper"
-import {DeviceSongCache} from "../util/const/ConstName"
+import { DeviceSongCache } from "../util/const/ConstName"
 
 export const useDeviceAudio = () => {
     const { isAllowed } = useAudioPermission()
@@ -20,9 +20,10 @@ export const useDeviceAudio = () => {
         setError(null)
         try {
             const result = await getDeviceAudioFiles()
-            const convert = deviceFilesToSongs(result)
+            const convert = await deviceFilesToSongs(result) 
+            // now async — reads real ID3/MP4 tags per file
             dispatch(setDeviceSong(convert))
-           await StoreData(DeviceSongCache, convert)
+            await StoreData(DeviceSongCache, convert)
             dispatch(computeMoods())
         } catch (err) {
             console.log("Failed to load audio files", err)
