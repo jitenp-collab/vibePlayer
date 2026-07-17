@@ -31,7 +31,6 @@ const scanFolder = async (path: string) => {
   } catch (error) {
     console.log(`Could not read folder: ${path}`, error);
   }
-
   return results;
 };
 

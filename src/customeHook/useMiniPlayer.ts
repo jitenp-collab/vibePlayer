@@ -27,7 +27,7 @@ export const useMiniPlayer = (
 
   // FIX: supports both sync and async fn, and catches native promise rejections
   // (setMediaItems/skipToNext/etc can reject async — a plain try/catch around
-  // a non-awaited call never sees that, which was the real crash cause)
+ 
   const withSkipLock = useCallback((fn: () => Promise<void> | void) => {
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
@@ -59,7 +59,7 @@ export const useMiniPlayer = (
       }
       if (source === "Reccomandation") return recommendeSong ?? [];
       if (source === "MoodSongs") {
-        // FIX: stay scoped to mood songs even if `mood` is momentarily falsy —
+        // stay scoped to mood songs even if `mood` is momentarily falsy —
         // never silently fall back to the full library mid-session
         if (!mood) return [];
         return deviceSong.filter(s => songMoods[s.id]?.mood === mood);
