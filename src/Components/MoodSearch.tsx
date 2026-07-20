@@ -6,7 +6,7 @@ import { colors } from '../util/theme/theme';
 import {
   getSongsForMood,
   matchMoodFromTextAI,
-} from '../customeHook/testDecode';
+} from '../util/testDecode';
 import ItemList from '../ReusableComponent/ItemList';
 import ReuseInput from '../ReusableComponent/ReuseInput';
 import { AiWaveformIcon } from '../assets/svg/SVGs';
@@ -156,15 +156,6 @@ const MoodSearchFab = () => {
                 </Text>
               </View>
             )}
-
-            {/* {!isAiChecking && !aiFailed && moodResult && (
-              <View style={styles.moodChip}>
-                <View style={styles.moodDot} />
-                <Text style={styles.moodChipText}>
-                  Matched mood: {moodResult}
-                </Text>
-              </View>
-            )} */}
 
             <View style={styles.divider} />
 

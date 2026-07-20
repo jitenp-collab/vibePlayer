@@ -1,7 +1,7 @@
 // util/customeHook/deviceAudioTosong.ts
 import RNFS from 'react-native-fs';
 import jsmediatags from 'jsmediatags';
-import { SongProp, AudioTagResult } from '../util/const/Type';
+import { SongProp, AudioTagResult } from './const/Type';
 
 const DEFAULT_ARTWORK = 'https://via.placeholder.com/300?text=Music';
 
@@ -62,7 +62,7 @@ const hashString = (str: string): string => {
 const extractArtworkToFile = async (
   picture: any,
   songPath: string,
-): Promise<string | undefined> => {
+) => {
   try {
     if (!picture?.data?.length) return undefined;
     if (picture.data.length > MAX_ARTWORK_BYTES) return undefined;
@@ -101,19 +101,23 @@ const readTags = (path: string): Promise<AudioTagResult> =>
     });
   });
 
-export const deviceFileToSong = async (file: RNFS.ReadDirItem): Promise<SongProp> => {
+export const deviceFileToSong = async (file: RNFS.ReadDirItem) => {
   const titleWithoutExtension = file.name.replace(/\.[^/.]+$/, '');
   const url = file.path.startsWith('file://') ? file.path : `file://${file.path}`;
 
   const tags = await readTags(file.path);
 
+  // iOS attaches its own stable id (see getDeviceAudio.ts) since `path` changes
+  // between imports there. Android's file.path is already stable — keep using it.
+  const stableId = (file as any).id ?? file.path;
+
   return {
-    id: file.path,
+    id: stableId,
     title: tags.title?.trim() || titleWithoutExtension,
     artist: tags.artist?.trim() || 'Unknown Artist',
     movie: tags.movie?.trim() || 'Unknown NAme',
     genres: [],
-    artwork: tags.artwork || DEFAULT_ARTWORK, // now a file:// path, not a base64 string
+    artwork: tags.artwork || DEFAULT_ARTWORK,
     url,
   };
 };
@@ -121,7 +125,7 @@ export const deviceFileToSong = async (file: RNFS.ReadDirItem): Promise<SongProp
 export const deviceFilesToSongs = async (
   files: RNFS.ReadDirItem[],
   onProgress?: (done: number, total: number) => void,
-): Promise<SongProp[]> => {
+) => {
   const results: SongProp[] = [];
   for (let i = 0; i < files.length; i++) {
     results.push(await deviceFileToSong(files[i]));

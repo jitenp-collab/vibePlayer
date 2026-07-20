@@ -27,7 +27,7 @@ import PlayListComponent from './PlayListComponent';
 import { PlaylistProp } from '../util/const/Type';
 import AppModal from '../ReusableComponent/AppMOdal';
 import ReuseButton from '../ReusableComponent/ReuseButton';
-import { shallowEqual } from 'react-redux';
+import { useNetworkPlaybackGuard } from '../customeHook/useNetworkPlaybackGuard';
 
 const PlayerScreen = () => {
   const navigation = useNavigation<any>();
@@ -102,11 +102,11 @@ const PlayerScreen = () => {
     handleNext,
     handlePrev,
     handleSeekComplete,
-    handleSeekBackward,
     handleSeekForward,
     handleSkipForward,
     panHandlers,
     isBuffering,
+    reloadAndPlay
   } = usePlayer(
     selectedSong,
     initialIndex,
@@ -116,71 +116,78 @@ const PlayerScreen = () => {
     mood,
   );
 
- const currentSong = selectedSong[currentIndex];
+  const currentSong = selectedSong[currentIndex];
 
-useEffect(() => {
-  if (source !== 'favourite') return;
+  const { isOffline, handleTogglePlay } = useNetworkPlaybackGuard(
+    currentSong,
+    playing,
+    togglePlay,
+    reloadAndPlay,
+  );
 
-  if (favouriteSong.length === 0) {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'TabComponent' }],
-    });
-    return;
-  }
+  useEffect(() => {
+    if (source !== 'favourite') return;
 
-  if (
-    currentSong &&
-    !favouriteSong.some((s: any) => s.id === currentSong.id)
-  ) {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
+    if (favouriteSong.length === 0) {
       navigation.reset({
         index: 0,
         routes: [{ name: 'TabComponent' }],
       });
+      return;
     }
+
+    if (
+      currentSong &&
+      !favouriteSong.some((s: any) => s.id === currentSong.id)
+    ) {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'TabComponent' }],
+        });
+      }
+    }
+  }, [source, favouriteSong, currentSong, navigation]);
+
+  // Moved above the early return — these must run on every render, no exceptions.
+  const handleToggleFavourite = useCallback(async () => {
+    if (!currentSong) return; // currentSong may briefly be undefined here now — guard inside instead
+    try {
+      await dispatch(AddFavourite(currentSong)).unwrap();
+    } catch (error) {
+      console.log('Failed to toggle favourite', error);
+    }
+  }, [dispatch, currentSong]);
+
+  const guardedNext = useCallback(() => {
+    if (isSkipLocked) return;
+    setIsSkipLocked(true);
+    handleNext();
+    setTimeout(() => setIsSkipLocked(false), 400);
+  }, [isSkipLocked, handleNext]);
+
+  const guardedPrev = useCallback(() => {
+    if (isSkipLocked) return;
+    setIsSkipLocked(true);
+    handlePrev();
+    setTimeout(() => setIsSkipLocked(false), 400);
+  }, [isSkipLocked, handlePrev]);
+
+  // NOW it's safe to return early — every hook above this line runs on every render, always.
+
+  if (!currentSong) {
+    return null;
   }
-}, [source, favouriteSong, currentSong, navigation]);
 
-// Moved above the early return — these must run on every render, no exceptions.
-const handleToggleFavourite = useCallback(async () => {
-  if (!currentSong) return; // currentSong may briefly be undefined here now — guard inside instead
-  try {
-    await dispatch(AddFavourite(currentSong)).unwrap();
-  } catch (error) {
-    console.log('Failed to toggle favourite', error);
-  }
-}, [dispatch, currentSong]);
+  const isFavourite = favouriteSong.some(
+    (data: any) => data.id === currentSong.id,
+  );
 
-const guardedNext = useCallback(() => {
-  if (isSkipLocked) return;
-  setIsSkipLocked(true);
-  handleNext();
-  setTimeout(() => setIsSkipLocked(false), 400);
-}, [isSkipLocked, handleNext]);
-
-const guardedPrev = useCallback(() => {
-  if (isSkipLocked) return;
-  setIsSkipLocked(true);
-  handlePrev();
-  setTimeout(() => setIsSkipLocked(false), 400);
-}, [isSkipLocked, handlePrev]);
-
-// NOW it's safe to return early — every hook above this line runs on every render, always.
-
-if (!currentSong) {
-  return null;
-}
-
-const isFavourite = favouriteSong.some(
-  (data: any) => data.id === currentSong.id,
-);
-
-const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
-  pl.songs?.some((s: any) => s.id === currentSong.id),
-);
+  const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
+    pl.songs?.some((s: any) => s.id === currentSong.id),
+  );
 
   return (
     <View style={styles.container} {...panHandlers}>
@@ -221,9 +228,7 @@ const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
             </Text>
           </View>
 
-          <Text style={styles.artist}>
-            Movie name : {currentSong.movie }
-          </Text>
+          <Text style={styles.artist}>Movie name : {currentSong.movie}</Text>
         </View>
         <Text style={styles.counter}>
           {currentIndex + 1}/{selectedSong.length}
@@ -258,6 +263,13 @@ const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
         </View>
       </View>
 
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <View style={styles.offlineDot} />
+          <Text style={styles.offlineBannerText}>No internet connection</Text>
+        </View>
+      )}
+
       <View style={styles.controls}>
         <ReuseButton
           onPress={guardedPrev}
@@ -274,7 +286,7 @@ const isInPlaylist = PlayList?.some((pl: PlaylistProp) =>
           <RewindSongSVG />
         </ReuseButton>
         <ReuseButton
-          onPress={togglePlay}
+           onPress={handleTogglePlay}  
           style={styles.playBtn}
           disabled={isBuffering}
         >
@@ -407,5 +419,30 @@ const styles = StyleSheet.create({
 
   AddtoPLayListButton: {
     padding: 4,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A1A22',
+    borderWidth: 1,
+    borderColor: '#3A3A45',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  offlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF5252',
+    marginRight: 8,
+  },
+  offlineBannerText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

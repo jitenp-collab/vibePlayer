@@ -4,6 +4,9 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../util/theme/theme';
 import { useAppDispatch, useAppSelector } from '../redux/hook';
 import { requestStopAnalysis } from '../redux/reduces/reducers';
+import { checkInternet } from '../util/checkInternet';
+
+const OFFLINE_POLL_MS = 5000;
 
 const AnalysisLoader = ({ done, total, onClose }: any) => {
   const dispatch = useAppDispatch();
@@ -17,6 +20,8 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
     () => !analysisProgress.isAnalyzing && total > 0 && done === total,
   );
   const wasAnalyzing = useRef(analysisProgress.isAnalyzing);
+
+  const [isOffline, setIsOffline] = useState(false);
 
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
@@ -38,6 +43,31 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
       onClose?.();
     }
   }, [analysisProgress.isAnalyzing, done, total, onClose]);
+
+  // Only poll for connectivity while analysis is actually in progress —
+  // no point checking once it's finished or on the complete screen.
+  useEffect(() => {
+    if (!analysisProgress.isAnalyzing) {
+      setIsOffline(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const poll = async () => {
+      const online = await checkInternet();
+      if (cancelled) return;
+      setIsOffline(!online);
+    };
+
+    poll();
+    const interval = setInterval(poll, OFFLINE_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [analysisProgress.isAnalyzing]);
 
   const handleManualClose = () => {
     setShowComplete(false);
@@ -73,6 +103,14 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${percent}%` }]} />
         </View>
+
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <View style={styles.offlineDot} />
+            <Text style={styles.offlineBannerText}>No internet connection</Text>
+          </View>
+        )}
+
         <Text style={styles.hint}>
           The more songs analyzed, the better your mood-based song search and
           suggestions will be.
@@ -96,8 +134,6 @@ const AnalysisLoader = ({ done, total, onClose }: any) => {
 
 export default AnalysisLoader;
 
-// styles unchanged from your original — closeBtn/closeBtnText etc. all stay
-
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,
@@ -113,7 +149,7 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     paddingHorizontal: 20,
     alignItems: 'center',
-    position: 'relative', // FIX: needed so closeBtn can be absolutely positioned inside
+    position: 'relative',
   },
   closeBtn: {
     position: 'absolute',
@@ -157,6 +193,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { height: '100%', borderRadius: 4, backgroundColor: colors.primary },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A1A22',
+    borderWidth: 1,
+    borderColor: '#3A3A45',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 14,
+    alignSelf: 'stretch',
+  },
+  offlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FF5252',
+    marginRight: 8,
+  },
+  offlineBannerText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   hint: {
     color: colors.textPrimary,
     fontSize: 11,

@@ -1,4 +1,3 @@
-// customeHook/useMiniPlayer.ts
 import { useCallback, useState, useEffect } from "react";
 import TrackPlayer, { useIsPlaying, useActiveMediaItem, Event, PlaybackState } from "@rntp/player";
 import { lastPlayedData, SongProp } from "../util/const/Type";
@@ -105,6 +104,7 @@ export const useMiniPlayer = (
   const song = lastPlayed && resolvedIndex !== -1 ? activeList[resolvedIndex] : undefined;
 
   // loads the queue into the native player only if it's empty, so we don't interrupt playback in progress
+
   const ensureQueueLoaded = useCallback(async () => {
     if (!lastPlayed) return;
     try {
@@ -117,11 +117,10 @@ export const useMiniPlayer = (
         const startIndex = resolveIndex(list, lastPlayed);
         const safeStartIndex = startIndex !== -1 ? startIndex : 0;
 
-        // await 
-        TrackPlayer.setMediaItems(list.map(toMediaItem), safeStartIndex);
+        // CRITICAL FIX: await setMediaItems so the queue is fully loaded before seekTo runs — same fire-and-forget bug that broke usePlayer.
+         TrackPlayer.setMediaItems(list.map(toMediaItem), safeStartIndex);
         if (lastPlayed.position > 0) {
-          // await
-          TrackPlayer.seekTo(lastPlayed.position);
+          await TrackPlayer.seekTo(lastPlayed.position);
         }
       }
     } catch (error) {
@@ -133,11 +132,37 @@ export const useMiniPlayer = (
     if (!lastPlayed || isBuffering) return;
     await ensureQueueLoaded();
     try {
-      TrackPlayer.isPlaying() ? TrackPlayer.pause() : TrackPlayer.play();
+      if (TrackPlayer.isPlaying()) {
+         TrackPlayer.pause();
+      } else {
+         TrackPlayer.play();
+      }
     } catch (error) {
       console.log('MiniPlayer togglePlay error', error);
     }
   }, [lastPlayed, ensureQueueLoaded, isBuffering]);
+
+  // reload the current song fresh and play — used to recover from a stalled
+  // player after a network drop, same purpose as usePlayer's reloadAndPlay
+  const reloadAndPlay = useCallback(async () => {
+    if (!lastPlayed) return;
+    try {
+      const list = getListForSource(lastPlayed.source, lastPlayed.playlistId, lastPlayed.mood);
+      if (list.length === 0) return;
+      const idx = resolveIndex(list, lastPlayed);
+      const safeIdx = idx !== -1 ? idx : 0;
+
+      console.log('[useMiniPlayer] reloadAndPlay -> reloading index', safeIdx);
+       TrackPlayer.setMediaItems(list.map(toMediaItem), safeIdx);
+      if (position > 0) {
+         TrackPlayer.seekTo(position);
+      }
+       TrackPlayer.play();
+      console.log('[useMiniPlayer] reloadAndPlay -> play done');
+    } catch (error) {
+      console.log('[useMiniPlayer] reloadAndPlay error', error);
+    }
+  }, [lastPlayed, getListForSource, resolveIndex, position]);
 
   // skip forward from the mini player, keeping lastPlayed + AsyncStorage in sync with the new song
   const handleNext = useCallback(() => {
@@ -188,6 +213,7 @@ export const useMiniPlayer = (
     progressPercent,
     isBuffering,
     togglePlay,
+    reloadAndPlay,
     handleNext,
     handlePrev,
   };

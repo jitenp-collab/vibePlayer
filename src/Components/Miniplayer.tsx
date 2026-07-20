@@ -11,6 +11,7 @@ import {
 import MarqueeText from '../ReusableComponent/MarqueeText';
 import { useAppSelector } from '../redux/hook';
 import { useMiniPlayer } from '../customeHook/useMiniPlayer';
+import { useNetworkPlaybackGuard } from '../customeHook/useNetworkPlaybackGuard';
 import FallbackImage from '../ReusableComponent/FallbackImage';
 import ReuseButton from '../ReusableComponent/ReuseButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,6 +34,7 @@ const MiniPlayer = () => {
     progressPercent,
     isBuffering,
     togglePlay,
+    reloadAndPlay,
     handleNext,
     handlePrev,
   } = useMiniPlayer(
@@ -42,6 +44,15 @@ const MiniPlayer = () => {
     PlayList,
     recommendedSong ?? [],
     songMoods
+  );
+
+ const { isOffline, handleTogglePlay } = useNetworkPlaybackGuard(
+    song,
+    playing,
+    togglePlay,
+    reloadAndPlay,
+    5000,   
+    false,  
   );
 
   if (!song || !lastPlayed) return null;
@@ -73,7 +84,7 @@ const MiniPlayer = () => {
         <View style={styles.info}>
           <MarqueeText key={song.id} style={styles.title}>{song.title}</MarqueeText>
           <Text style={styles.artist} numberOfLines={1}>
-            {song.artist}
+            {isOffline ? 'No internet connection' : song.artist}
           </Text>
         </View>
         <ReuseButton
@@ -84,7 +95,7 @@ const MiniPlayer = () => {
           <PreviousSVG width={22} height={22} fill="#fff" />
         </ReuseButton>
         <ReuseButton
-          onPress={togglePlay}
+          onPress={handleTogglePlay}
           style={styles.playBtn}
           hitSlop={10}
           disabled={isBuffering}

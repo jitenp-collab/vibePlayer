@@ -1,6 +1,6 @@
 import { AudioContext } from 'react-native-audio-api';
-import { SongFeatures, SongProp, MoodResult, Mood } from '../util/const/Type';
-import { GROQ_API_KEY } from '../util/const/apiConfig';
+import { SongFeatures, SongProp, MoodResult, Mood } from './const/Type';
+import { GROQ_API_KEY } from '../services/apiConfig';
 
 // ---------- FEATURE CALCULATIONS ----------
 
@@ -53,7 +53,7 @@ const wait = (ms: number) => new Promise((resolve: any) => setTimeout(resolve, m
 export const analyzeLibrary = async (
   songs: SongProp[],
   onProgress?: (done: number, total: number) => void
-): Promise<SongFeatures[]> => {
+) => {
   const results: SongFeatures[] = [];
 
   for (let i = 0; i < songs.length; i++) {
@@ -215,7 +215,6 @@ export const matchMoodFromTextAI = async (text: string) => {
     });
 
     if (!response.ok) {
-      console.log('Groq request failed:', response.status);
       return { mood: null, failed: true };
     }
 

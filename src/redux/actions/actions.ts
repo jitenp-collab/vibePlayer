@@ -2,7 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { FavouritSong, PlayListSong, PlayHistory, SongAnalysis,DeviceSongCache } from "../../util/const/ConstName";
 import { loadData, StoreData } from "../../util/Storage/asyncStorageHelper";
 import { PlaylistProp } from "../../util/const/Type";
-import { analyzeSong } from "../../customeHook/testDecode";
+import { analyzeSong } from "../../util/testDecode";
 import { setAnalysisProgress } from "../reduces/reducers";
 
 
@@ -264,6 +264,3 @@ export const loadAnalysisData = createAsyncThunk("song/hydrateAnalysis", async (
         return {}
     }
 })
-
-
-

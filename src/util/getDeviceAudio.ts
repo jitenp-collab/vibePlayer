@@ -31,7 +31,7 @@ const scanFolder = async (path: string) => {
   return results;
 };
 
-const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
+const getDeviceAudioFilesIOS = async () => {
   try {
     const pickedFiles = await pick({
       type: [types.audio],
@@ -42,7 +42,7 @@ const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
     if (audioFiles.length === 0) return [];
 
     // iOS only keeps the picker's uri readable for a short window — copy into app storage
-    
+
     // so both playback AND tag-reading (jsmediatags) can read the file anytime after this.
 
     // cast to non-empty tuple: keepLocalCopy's type requires it, and length is already checked above
@@ -57,15 +57,25 @@ const getDeviceAudioFilesIOS = async (): Promise<RNFS.ReadDirItem[]> => {
       destination: 'documentDirectory',
     });
 
-    return audioFiles.map((file, i) => ({
-      name: file.name ?? 'Unknown',
-      path: localCopies[i]?.status === 'success' ? localCopies[i].localUri : file.uri, // fall back if copy failed
-      size: file.size ?? 0,
-      ctime: undefined,
-      mtime: undefined,
-      isFile: () => true,
-      isDirectory: () => false,
-    })) as unknown as RNFS.ReadDirItem[];
+    return audioFiles.map((file, i) => {
+      const copy = localCopies[i];
+      if (copy?.status !== 'success') {
+        console.log('[getDeviceAudioFilesIOS] keepLocalCopy failed for', file.name, copy);
+      }
+
+      const stableId = `ios-${(file.name ?? 'unknown').toLowerCase()}-${file.size ?? 0}`;
+
+      return {
+        name: file.name ?? 'Unknown',
+        path: copy?.status === 'success' ? copy.localUri : file.uri,
+        size: file.size ?? 0,
+        ctime: undefined,
+        mtime: undefined,
+        isFile: () => true,
+        isDirectory: () => false,
+        id: stableId, // extra field — consumed in deviceAudioTosong.ts, not part of RNFS's real type
+      };
+    }) as unknown as RNFS.ReadDirItem[];
   } catch (error) {
     if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
       return [];

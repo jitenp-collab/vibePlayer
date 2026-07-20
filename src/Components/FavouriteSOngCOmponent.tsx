@@ -18,7 +18,6 @@ const FavouriteSOngCOmponent = ({
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
 
-  // hi
 
   return (
     <View style={[{ paddingBottom: hidePad ? 0 : 0 }, styles.container]}>

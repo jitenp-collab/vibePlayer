@@ -3,7 +3,7 @@ import { SongProp } from '../../util/const/Type';
 import { songs as offlineSongs } from '../../assets/OfflineSongs';
 import { SongsState } from '../../util/const/Type';
 import { AddFavourite, addToPlayList, createPlayList, deletPLayList, loadFavouriteSOng, loadPLayList, loadRecommendedSongs, removeFromPlayList, analyzeAndSaveSongs, loadAnalysisData, loadDeviceSongs } from '../actions/actions';
-import { calculateThresholds, labelMood } from '../../customeHook/testDecode';
+import { calculateThresholds, labelMood } from '../../util/testDecode';
 
 
 const initialState: SongsState = {
